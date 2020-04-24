@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "piz",
+    "test_suite",
+]
