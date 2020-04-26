@@ -9,4 +9,7 @@ pub enum ZipError {
 
     #[error("Invalid Zip archive: {0}")]
     InvalidArchive(&'static str),
+
+    #[error("Unsupported Zip archive: {0}")]
+    UnsupportedArchive(String),
 }

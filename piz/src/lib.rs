@@ -1,6 +1,8 @@
 pub mod read;
 pub mod result;
 
+mod spec;
+
 #[cfg(test)]
 mod tests {
     #[test]

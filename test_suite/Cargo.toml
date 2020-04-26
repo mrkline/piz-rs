@@ -9,4 +9,5 @@ publish = false
 
 [dependencies]
 anyhow = "1.0"
+stderrlog = "0.4"
 piz = { path = "../piz" }

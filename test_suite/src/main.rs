@@ -12,6 +12,10 @@ fn main() -> Result<()> {
         bail!("Usage: test_suite <zip file>");
     }
 
+    let mut errlog = stderrlog::new();
+    errlog.verbosity(4);
+    errlog.init()?;
+
     let zip_path = &args[1];
     println!("{}", zip_path);
 
