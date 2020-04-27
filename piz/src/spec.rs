@@ -276,9 +276,9 @@ impl CentralDirectoryEntry {
         let crc32 = read_u32(entry);
         let compressed_size = read_u32(entry);
         let uncompressed_size = read_u32(entry);
-        let file_name_length = read_u16(entry) as usize;
-        let extra_field_length = read_u16(entry) as usize;
-        let file_comment_length = read_u16(entry) as usize;
+        let file_name_length = usize(read_u16(entry))?;
+        let extra_field_length = usize(read_u16(entry))?;
+        let file_comment_length = usize(read_u16(entry))?;
         let disk_number = read_u16(entry);
         let internal_file_attributes = read_u16(entry);
         let external_file_attributes = read_u32(entry);
