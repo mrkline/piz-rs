@@ -10,7 +10,6 @@ pub struct ZipArchive<'a> {
 
 impl<'a> ZipArchive<'a> {
     pub fn with_prepended_junk(mut mapping: &'a [u8]) -> ZipResult<(Self, usize)> {
-
         let eocdr_posit = spec::find_eocdr(&mapping)?;
         let eocdr = spec::EndOfCentralDirectory::parse(&mapping[eocdr_posit..])?;
         trace!("{:?}", eocdr);
@@ -96,7 +95,17 @@ impl<'a> ZipArchive<'a> {
         }
 
         mapping = &mapping[archive_offset..];
-        trace!("{} entries at nominal offset {}", entries, nominal_central_directory_offset);
+        trace!(
+            "{} entries at nominal offset {}",
+            entries,
+            nominal_central_directory_offset
+        );
+
+        let mut central_directory = &mapping[nominal_central_directory_offset..];
+
+        for _ in 0..entries {
+            spec::CentralDirectoryEntry::parse_and_consume(&mut central_directory)?;
+        }
 
         Ok((ZipArchive { mapping }, archive_offset))
     }

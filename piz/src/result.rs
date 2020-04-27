@@ -10,6 +10,9 @@ pub enum ZipError {
     #[error("Invalid Zip archive: {0}")]
     InvalidArchive(&'static str),
 
+    #[error("Invalid UTF-8")]
+    Encoding(#[from] std::str::Utf8Error),
+
     #[error("Unsupported Zip archive: {0}")]
     UnsupportedArchive(String),
 

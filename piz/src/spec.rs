@@ -1,5 +1,7 @@
+use std::borrow::Cow;
 use std::convert::TryInto;
 
+use codepage_437::*;
 use twoway::{find_bytes, rfind_bytes};
 
 use crate::arch::usize;
@@ -8,6 +10,7 @@ use crate::result::*;
 const EOCDR_MAGIC: [u8; 4] = [b'P', b'K', 5, 6];
 const ZIP64_EOCDR_MAGIC: [u8; 4] = [b'P', b'K', 6, 6];
 const ZIP64_EOCDR_LOCATOR_MAGIC: [u8; 4] = [b'P', b'K', 6, 7];
+const CENTRAL_DIRECTORY_MAGIC: [u8; 4] = [b'P', b'K', 1, 2];
 
 // Straight from the Rust docs:
 fn read_u64(input: &mut &[u8]) -> u64 {
@@ -222,4 +225,82 @@ pub fn find_zip64_eocdr(mapping: &[u8]) -> ZipResult<usize> {
     find_bytes(mapping, &ZIP64_EOCDR_MAGIC).ok_or(ZipError::InvalidArchive(
         "Couldn't find zip64 End Of Central Directory Record",
     ))
+}
+
+pub struct CentralDirectoryEntry {}
+
+impl CentralDirectoryEntry {
+    pub fn parse_and_consume(entry: &mut &[u8]) -> ZipResult<Self> {
+        // 4.3.12  Central directory structure:
+        //
+        // [central directory header 1]
+        // .
+        // .
+        // .
+        // [central directory header n]
+        // [digital signature]
+        //
+        // File header:
+        //
+        //   central file header signature   4 bytes  (0x02014b50)
+        //   version made by                 2 bytes
+        //   version needed to extract       2 bytes
+        //   general purpose bit flag        2 bytes
+        //   compression method              2 bytes
+        //   last mod file time              2 bytes
+        //   last mod file date              2 bytes
+        //   crc-32                          4 bytes
+        //   compressed size                 4 bytes
+        //   uncompressed size               4 bytes
+        //   file name length                2 bytes
+        //   extra field length              2 bytes
+        //   file comment length             2 bytes
+        //   disk number start               2 bytes
+        //   internal file attributes        2 bytes
+        //   external file attributes        4 bytes
+        //   relative offset of local header 4 bytes
+        //
+        //   file name (variable size)
+        //   extra field (variable size)
+        //   file comment (variable size)
+        if entry[..4] != CENTRAL_DIRECTORY_MAGIC {
+            return Err(ZipError::InvalidArchive("Invalid central directory entry"));
+        }
+        *entry = &entry[4..];
+        let source_version = read_u16(entry);
+        let minimum_extract_version = read_u16(entry);
+        let flags = read_u16(entry);
+        let compression_method = read_u16(entry);
+        let last_mod_time = read_u16(entry);
+        let last_mod_date = read_u16(entry);
+        let crc32 = read_u32(entry);
+        let compressed_size = read_u32(entry);
+        let uncompressed_size = read_u32(entry);
+        let file_name_length = read_u16(entry) as usize;
+        let extra_field_length = read_u16(entry) as usize;
+        let file_comment_length = read_u16(entry) as usize;
+        let disk_number = read_u16(entry);
+        let internal_file_attributes = read_u16(entry);
+        let external_file_attributes = read_u32(entry);
+        let offset = read_u32(entry) as u64;
+        let (file_name_raw, remaining) = entry.split_at(file_name_length);
+        let (extra_field, remaining) = remaining.split_at(extra_field_length);
+        let (file_comment_raw, remaining) = remaining.split_at(file_comment_length);
+        *entry = remaining;
+
+        // Done grabbing bytes. Let's decode some stuff:
+
+        let encrypted = flags & 1 == 1;
+        let is_utf8 = flags & (1 << 11) != 0;
+
+        let file_name: Cow<str> = if is_utf8 {
+            Cow::from(std::str::from_utf8(file_name_raw).map_err(|e| ZipError::Encoding(e))?)
+        } else {
+            Cow::borrow_from_cp437(file_name_raw, &CP437_CONTROL)
+        };
+
+        log::trace!("Entry for {:?}", file_name);
+
+        Ok(Self {})
+    }
 }
