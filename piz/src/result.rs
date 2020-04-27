@@ -13,6 +13,9 @@ pub enum ZipError {
     #[error("Unsupported Zip archive: {0}")]
     UnsupportedArchive(String),
 
+    #[error("Archive prepended with {0} unknown bytes")]
+    PrependedWithUnknownBytes(usize),
+
     /// A cast from a 64-bit int to a usize failed while mapping the file,
     /// probably on a 32-bit system.
     ///

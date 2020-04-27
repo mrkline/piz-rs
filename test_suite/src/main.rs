@@ -2,6 +2,7 @@ use std::env;
 use std::fs::File;
 
 use anyhow::*;
+use memmap::Mmap;
 
 use piz::read::ZipArchive;
 
@@ -20,6 +21,8 @@ fn main() -> Result<()> {
     println!("{}", zip_path);
 
     let zip_file = File::open(zip_path).context("Couldn't open zip file")?;
-    let _archive = ZipArchive::new(&zip_file).context("Couldn't load archive")?;
+    let mapping = unsafe { Mmap::map(&zip_file).context("Couldn't mmap zip file")? };
+
+    let _archive = ZipArchive::new(&mapping).context("Couldn't load archive")?;
     Ok(())
 }

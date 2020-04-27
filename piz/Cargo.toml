@@ -8,6 +8,5 @@ edition = "2018"
 
 [dependencies]
 log = "0.4"
-memmap = "0.7"
 thiserror = "1.0"
 twoway = "0.2"

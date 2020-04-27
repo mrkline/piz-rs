@@ -1,20 +1,15 @@
-use std::fs::File;
-
 use log::*;
-use memmap::Mmap;
 
 use crate::arch::usize;
 use crate::result::*;
 use crate::spec;
 
-pub struct ZipArchive {
-    mapping: Mmap,
-    archive_offset: usize,
+pub struct ZipArchive<'a> {
+    mapping: &'a [u8],
 }
 
-impl ZipArchive {
-    pub fn new(file: &File) -> ZipResult<Self> {
-        let mapping = unsafe { Mmap::map(file)? };
+impl<'a> ZipArchive<'a> {
+    pub fn with_prepended_junk(mut mapping: &'a [u8]) -> ZipResult<(Self, usize)> {
 
         let eocdr_posit = spec::find_eocdr(&mapping)?;
         let eocdr = spec::EndOfCentralDirectory::parse(&mapping[eocdr_posit..])?;
@@ -32,6 +27,9 @@ impl ZipArchive {
                 eocdr.entries, eocdr.entries_on_this_disk
             )));
         }
+
+        let nominal_central_directory_offset: usize;
+        let entries: u64;
 
         // Zip files can be prepended by arbitrary junk,
         // so all the given positions might be off.
@@ -78,8 +76,12 @@ impl ZipArchive {
             archive_offset = zip64_eocdr_posit;
             let zip64_eocdr = spec::Zip64EndOfCentralDirectory::parse(
                 &zip64_eocdr_search_space[zip64_eocdr_posit..],
-            );
+            )?;
+
             trace!("{:?}", zip64_eocdr);
+
+            nominal_central_directory_offset = usize(zip64_eocdr.central_directory_offset)?;
+            entries = zip64_eocdr.entries;
         } else {
             // The offset is the actual position versus the stored one.
             let actual_cdr_posit = eocdr_posit.checked_sub(usize(eocdr.central_directory_size)?);
@@ -89,13 +91,21 @@ impl ZipArchive {
                 .ok_or(ZipError::InvalidArchive(
                     "Invalid central directory size or offset",
                 ))?;
+            nominal_central_directory_offset = usize(eocdr.central_directory_offset)?;
+            entries = eocdr.entries as u64;
         }
 
-        trace!("Archive prepended with {} bytes of junk", archive_offset);
+        mapping = &mapping[archive_offset..];
+        trace!("{} entries at nominal offset {}", entries, nominal_central_directory_offset);
 
-        Ok(ZipArchive {
-            mapping,
-            archive_offset,
-        })
+        Ok((ZipArchive { mapping }, archive_offset))
+    }
+
+    pub fn new(mapping: &'a [u8]) -> ZipResult<Self> {
+        let (new_archive, archive_offset) = Self::with_prepended_junk(mapping)?;
+        if archive_offset != 0 {
+            return Err(ZipError::PrependedWithUnknownBytes(archive_offset));
+        }
+        Ok(new_archive)
     }
 }
