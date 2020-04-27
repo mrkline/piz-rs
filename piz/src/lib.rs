@@ -1,6 +1,7 @@
 pub mod read;
 pub mod result;
 
+mod arch;
 mod spec;
 
 #[cfg(test)]

@@ -4,6 +4,7 @@ use std::convert::TryInto;
 
 use twoway::{find_bytes, rfind_bytes};
 
+use crate::arch::usize;
 use crate::result::*;
 
 const EOCDR_MAGIC: [u8; 4] = [b'P', b'K', 5, 6];
@@ -41,7 +42,7 @@ pub struct EndOfCentralDirectory<'a> {
 }
 
 impl<'a> EndOfCentralDirectory<'a> {
-    pub fn parse(mut eocdr: &'a [u8]) -> Self {
+    pub fn parse(mut eocdr: &'a [u8]) -> ZipResult<Self> {
         // 4.3.16  End of central directory record:
         //
         // end of central dir signature    4 bytes  (0x06054b50)
@@ -69,9 +70,9 @@ impl<'a> EndOfCentralDirectory<'a> {
         let central_directory_size = read_u32(&mut eocdr);
         let central_directory_offset = read_u32(&mut eocdr);
         let comment_length = read_u16(&mut eocdr);
-        let file_comment = &eocdr[..comment_length as usize];
+        let file_comment = &eocdr[..usize(comment_length)?];
 
-        Self {
+        Ok(Self {
             disk_number,
             disk_with_central_directory,
             entries_on_this_disk,
@@ -79,7 +80,7 @@ impl<'a> EndOfCentralDirectory<'a> {
             central_directory_size,
             central_directory_offset,
             file_comment,
-        }
+        })
     }
 
     fn fixed_size_in_file() -> usize {
@@ -194,13 +195,14 @@ impl<'a> Zip64EndOfCentralDirectory<'a> {
         // (SizeOfVariableData = Size - SizeOfFixedFields + 12)
 
         // Check for underflow:
-        if (eocdr_size as usize + 12) < Self::fixed_size_in_file() {
+        let eocdr_size = usize(eocdr_size)?;
+        if (eocdr_size + 12) < Self::fixed_size_in_file() {
             return Err(ZipError::InvalidArchive(
                 "Invalid extensible data length in Zip64 End Of Central Directory Record",
             ));
         }
         // We should be left with just the extensible data:
-        let extensible_data_length = eocdr_size as usize + 12 - Self::fixed_size_in_file();
+        let extensible_data_length = eocdr_size + 12 - Self::fixed_size_in_file();
         if eocdr.len() != extensible_data_length {
             return Err(ZipError::InvalidArchive(
                 "Invalid extensible data length in Zip64 End Of Central Directory Record",

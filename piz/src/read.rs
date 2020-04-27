@@ -3,6 +3,7 @@ use std::fs::File;
 use log::*;
 use memmap::Mmap;
 
+use crate::arch::usize;
 use crate::result::*;
 use crate::spec;
 
@@ -16,7 +17,7 @@ impl ZipArchive {
         let mapping = unsafe { Mmap::map(file)? };
 
         let eocdr_posit = spec::find_eocdr(&mapping)?;
-        let eocdr = spec::EndOfCentralDirectory::parse(&mapping[eocdr_posit..]);
+        let eocdr = spec::EndOfCentralDirectory::parse(&mapping[eocdr_posit..])?;
         trace!("{:?}", eocdr);
 
         if eocdr.disk_number != eocdr.disk_with_central_directory {
@@ -58,7 +59,7 @@ impl ZipArchive {
 
             // Search for the zip64 EOCDR, from its nominal starting position
             // to the end of where it could be.
-            let zip64_eocdr_search_start = zip64_eocdr_locator.zip64_eocdr_offset as usize;
+            let zip64_eocdr_search_start = usize(zip64_eocdr_locator.zip64_eocdr_offset)?;
             let zip64_eocdr_search_end = eocdr_posit - zip64_eocdr_locator.size_in_file();
             let zip64_eocdr_search_space =
                 &mapping[zip64_eocdr_search_start..zip64_eocdr_search_end];
@@ -73,9 +74,10 @@ impl ZipArchive {
             trace!("{:?}", zip64_eocdr);
         } else {
             // The offset is the actual position versus the stored one.
-            let actual_cdr_posit = eocdr_posit.checked_sub(eocdr.central_directory_size as usize);
+            let actual_cdr_posit = eocdr_posit.checked_sub(usize(eocdr.central_directory_size)?);
+            let nominal_offset = usize(eocdr.central_directory_offset)?;
             archive_offset = actual_cdr_posit
-                .and_then(|off| off.checked_sub(eocdr.central_directory_offset as usize))
+                .and_then(|off| off.checked_sub(nominal_offset))
                 .ok_or(ZipError::InvalidArchive(
                     "Invalid central directory size or offset",
                 ))?;
