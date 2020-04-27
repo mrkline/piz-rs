@@ -38,7 +38,11 @@ impl ZipArchive {
         // Calculate the offset.
         let archive_offset;
 
-        let zip64_eocdr_locator_posit = eocdr_posit - 20;
+        let zip64_eocdr_locator_posit = eocdr_posit
+            .checked_sub(spec::Zip64EndOfCentralDirectoryLocator::size_in_file())
+            .ok_or(ZipError::InvalidArchive(
+                "Too small for anything but End Of Central Directory Record",
+            ))?;
         if let Some(zip64_eocdr_locator) =
             spec::Zip64EndOfCentralDirectoryLocator::parse(&mapping[zip64_eocdr_locator_posit..])
         {
@@ -60,7 +64,11 @@ impl ZipArchive {
             // Search for the zip64 EOCDR, from its nominal starting position
             // to the end of where it could be.
             let zip64_eocdr_search_start = usize(zip64_eocdr_locator.zip64_eocdr_offset)?;
-            let zip64_eocdr_search_end = eocdr_posit - zip64_eocdr_locator.size_in_file();
+            let zip64_eocdr_search_end = eocdr_posit
+                .checked_sub(spec::Zip64EndOfCentralDirectoryLocator::size_in_file())
+                .ok_or(ZipError::InvalidArchive(
+                    "Too small for Zip64 End Of Central Directory Record",
+                ))?;
             let zip64_eocdr_search_space =
                 &mapping[zip64_eocdr_search_start..zip64_eocdr_search_end];
 

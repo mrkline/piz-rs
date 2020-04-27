@@ -1,5 +1,3 @@
-#![allow(dead_code)] // later
-
 use std::convert::TryInto;
 
 use twoway::{find_bytes, rfind_bytes};
@@ -82,14 +80,6 @@ impl<'a> EndOfCentralDirectory<'a> {
             file_comment,
         })
     }
-
-    fn fixed_size_in_file() -> usize {
-        22
-    }
-
-    pub fn size_in_file(&self) -> usize {
-        Self::fixed_size_in_file() + self.file_comment.len()
-    }
 }
 
 pub fn find_eocdr(mapping: &[u8]) -> ZipResult<usize> {
@@ -132,7 +122,7 @@ impl Zip64EndOfCentralDirectoryLocator {
         })
     }
 
-    pub fn size_in_file(&self) -> usize {
+    pub fn size_in_file() -> usize {
         20
     }
 }
@@ -225,10 +215,6 @@ impl<'a> Zip64EndOfCentralDirectory<'a> {
 
     fn fixed_size_in_file() -> usize {
         56
-    }
-
-    pub fn size_in_file(&self) -> usize {
-        Self::fixed_size_in_file() + self.extensible_data.len()
     }
 }
 
