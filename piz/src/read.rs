@@ -103,9 +103,16 @@ impl<'a> ZipArchive<'a> {
 
         let mut central_directory = &mapping[nominal_central_directory_offset..];
 
+        let mut contents = Vec::new();
+        contents.reserve(usize(entries)?);
+
         for _ in 0..entries {
             let dir_entry = spec::CentralDirectoryEntry::parse_and_consume(&mut central_directory)?;
             trace!("{:?}", dir_entry);
+
+            let file_metadata = spec::FileMetadata::from_cde(&dir_entry)?;
+            debug!("{:?}", file_metadata);
+            contents.push(file_metadata);
         }
 
         Ok((ZipArchive { mapping }, archive_offset))

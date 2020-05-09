@@ -241,14 +241,14 @@ pub struct CentralDirectoryEntry<'a> {
     pub disk_number: u16,
     pub internal_file_attributes: u16,
     pub external_file_attributes: u32,
-    pub local_header_offset: u32,
-    pub file_name: Cow<'a, str>,
+    pub header_offset: u32,
+    pub file_name: &'a [u8],
     pub extra_field: &'a [u8],
     pub file_comment: &'a [u8],
 }
 
 impl<'a> CentralDirectoryEntry<'a> {
-    pub fn parse_and_consume(entry: &'a mut &[u8]) -> ZipResult<Self> {
+    pub fn parse_and_consume(entry: &mut &'a [u8]) -> ZipResult<Self> {
         // 4.3.12  Central directory structure:
         //
         // [central directory header 1]
@@ -300,22 +300,11 @@ impl<'a> CentralDirectoryEntry<'a> {
         let disk_number = read_u16(entry);
         let internal_file_attributes = read_u16(entry);
         let external_file_attributes = read_u32(entry);
-        let local_header_offset = read_u32(entry);
-        let (file_name_raw, remaining) = entry.split_at(file_name_length);
+        let header_offset = read_u32(entry);
+        let (file_name, remaining) = entry.split_at(file_name_length);
         let (extra_field, remaining) = remaining.split_at(extra_field_length);
         let (file_comment, remaining) = remaining.split_at(file_comment_length);
         *entry = remaining;
-
-        // Done grabbing bytes. Let's decode some stuff:
-
-        let encrypted = flags & 1 == 1;
-        let is_utf8 = flags & (1 << 11) != 0;
-
-        let file_name: Cow<str> = if is_utf8 {
-            Cow::from(std::str::from_utf8(file_name_raw).map_err(|e| ZipError::Encoding(e))?)
-        } else {
-            Cow::borrow_from_cp437(file_name_raw, &CP437_CONTROL)
-        };
 
         Ok(Self {
             source_version,
@@ -330,10 +319,107 @@ impl<'a> CentralDirectoryEntry<'a> {
             disk_number,
             internal_file_attributes,
             external_file_attributes,
-            local_header_offset,
+            header_offset,
             file_name,
             extra_field,
-            file_comment
+            file_comment,
         })
     }
+}
+
+#[derive(Debug)]
+pub struct FileMetadata<'a> {
+    size: usize,
+    compressed_size: usize,
+    crc32: u32,
+    header_offset: usize,
+    // TODO: compression type
+    file_name: Cow<'a, str>,
+    // TODO: Add other fields the user might want to know about,
+    // and getters in ZipFile.
+}
+
+impl<'a> FileMetadata<'a> {
+    pub fn from_cde(cde: &CentralDirectoryEntry<'a>) -> ZipResult<Self> {
+        let is_utf8 = cde.flags & (1 << 11) != 0;
+
+        let file_name: Cow<str> = if is_utf8 {
+            Cow::from(std::str::from_utf8(cde.file_name).map_err(|e| ZipError::Encoding(e))?)
+        } else {
+            Cow::borrow_from_cp437(cde.file_name, &CP437_CONTROL)
+        };
+
+        if cde.disk_number != 0 {
+            return Err(ZipError::UnsupportedArchive(format!(
+                "No support for multi-disk archives: file {} claims to be on disk {}",
+                file_name, cde.disk_number,
+            )));
+        }
+
+        let encrypted = cde.flags & 1 == 1;
+        if encrypted {
+            return Err(ZipError::UnsupportedArchive(format!(
+                "No support for encrypted files, as {} claims to be",
+                file_name
+            )));
+        }
+
+        let mut metadata = Self {
+            size: usize(cde.uncompressed_size)?,
+            compressed_size: usize(cde.compressed_size)?,
+            crc32: cde.crc32,
+            header_offset: usize(cde.header_offset)?,
+            file_name,
+        };
+
+        parse_extra_field(&mut metadata, cde.extra_field)?;
+
+        Ok(metadata)
+    }
+}
+
+fn parse_extra_field(metadata: &mut FileMetadata, mut extra_field: &[u8]) -> ZipResult<()> {
+   // 4.5.1 In order to allow different programs and different types
+   // of information to be stored in the 'extra' field in .ZIP
+   // files, the following structure MUST be used for all
+   // programs storing data in this field:
+
+   //     header1+data1 + header2+data2 . . .
+
+   // Each header MUST consist of:
+
+   //     Header ID - 2 bytes
+   //     Data Size - 2 bytes
+    while extra_field.len() > 0 {
+        let kind = read_u16(&mut extra_field);
+        let field_len = read_u16(&mut extra_field);
+
+        let mut amount_left = field_len as i16;
+        match kind {
+            // Zip64 extended information extra field
+            0x0001 => {
+                if metadata.size == u32::MAX as usize {
+                    metadata.size = usize(read_u64(&mut extra_field))?;
+                    amount_left -= 8;
+                }
+                if metadata.compressed_size == u32::MAX as usize {
+                    metadata.compressed_size = usize(read_u64(&mut extra_field))?;
+                    amount_left -= 8;
+                }
+                if metadata.header_offset == u32::MAX as usize {
+                    metadata.header_offset = usize(read_u64(&mut extra_field))?;
+                    amount_left -= 8;
+                }
+                // We already checked many times that this isn't a multi-disk archive.
+                if amount_left != 0 {
+                    return Err(ZipError::InvalidArchive(
+                        "Extra data field contains disk number",
+                    ));
+                }
+            }
+            _ => {}
+        }
+        extra_field = &extra_field[amount_left as usize..];
+    }
+    Ok(())
 }
