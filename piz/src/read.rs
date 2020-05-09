@@ -9,7 +9,7 @@ pub struct ZipArchive<'a> {
 }
 
 impl<'a> ZipArchive<'a> {
-    pub fn with_prepended_junk(mut mapping: &'a [u8]) -> ZipResult<(Self, usize)> {
+    pub fn with_prepended_data(mut mapping: &'a [u8]) -> ZipResult<(Self, usize)> {
         let eocdr_posit = spec::find_eocdr(&mapping)?;
         let eocdr = spec::EndOfCentralDirectory::parse(&mapping[eocdr_posit..])?;
         trace!("{:?}", eocdr);
@@ -104,14 +104,15 @@ impl<'a> ZipArchive<'a> {
         let mut central_directory = &mapping[nominal_central_directory_offset..];
 
         for _ in 0..entries {
-            spec::CentralDirectoryEntry::parse_and_consume(&mut central_directory)?;
+            let dir_entry = spec::CentralDirectoryEntry::parse_and_consume(&mut central_directory)?;
+            trace!("{:?}", dir_entry);
         }
 
         Ok((ZipArchive { mapping }, archive_offset))
     }
 
     pub fn new(mapping: &'a [u8]) -> ZipResult<Self> {
-        let (new_archive, archive_offset) = Self::with_prepended_junk(mapping)?;
+        let (new_archive, archive_offset) = Self::with_prepended_data(mapping)?;
         if archive_offset != 0 {
             return Err(ZipError::PrependedWithUnknownBytes(archive_offset));
         }

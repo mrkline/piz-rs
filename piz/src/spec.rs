@@ -227,10 +227,28 @@ pub fn find_zip64_eocdr(mapping: &[u8]) -> ZipResult<usize> {
     ))
 }
 
-pub struct CentralDirectoryEntry {}
+#[derive(Debug)]
+pub struct CentralDirectoryEntry<'a> {
+    pub source_version: u16,
+    pub minimum_extract_version: u16,
+    pub flags: u16,
+    pub compression_method: u16,
+    pub last_modified_time: u16,
+    pub last_modified_date: u16,
+    pub crc32: u32,
+    pub compressed_size: u32,
+    pub uncompressed_size: u32,
+    pub disk_number: u16,
+    pub internal_file_attributes: u16,
+    pub external_file_attributes: u32,
+    pub local_header_offset: u32,
+    pub file_name: Cow<'a, str>,
+    pub extra_field: &'a [u8],
+    pub file_comment: &'a [u8],
+}
 
-impl CentralDirectoryEntry {
-    pub fn parse_and_consume(entry: &mut &[u8]) -> ZipResult<Self> {
+impl<'a> CentralDirectoryEntry<'a> {
+    pub fn parse_and_consume(entry: &'a mut &[u8]) -> ZipResult<Self> {
         // 4.3.12  Central directory structure:
         //
         // [central directory header 1]
@@ -271,8 +289,8 @@ impl CentralDirectoryEntry {
         let minimum_extract_version = read_u16(entry);
         let flags = read_u16(entry);
         let compression_method = read_u16(entry);
-        let last_mod_time = read_u16(entry);
-        let last_mod_date = read_u16(entry);
+        let last_modified_time = read_u16(entry);
+        let last_modified_date = read_u16(entry);
         let crc32 = read_u32(entry);
         let compressed_size = read_u32(entry);
         let uncompressed_size = read_u32(entry);
@@ -282,10 +300,10 @@ impl CentralDirectoryEntry {
         let disk_number = read_u16(entry);
         let internal_file_attributes = read_u16(entry);
         let external_file_attributes = read_u32(entry);
-        let offset = read_u32(entry) as u64;
+        let local_header_offset = read_u32(entry);
         let (file_name_raw, remaining) = entry.split_at(file_name_length);
         let (extra_field, remaining) = remaining.split_at(extra_field_length);
-        let (file_comment_raw, remaining) = remaining.split_at(file_comment_length);
+        let (file_comment, remaining) = remaining.split_at(file_comment_length);
         *entry = remaining;
 
         // Done grabbing bytes. Let's decode some stuff:
@@ -299,8 +317,23 @@ impl CentralDirectoryEntry {
             Cow::borrow_from_cp437(file_name_raw, &CP437_CONTROL)
         };
 
-        log::trace!("Entry for {:?}", file_name);
-
-        Ok(Self {})
+        Ok(Self {
+            source_version,
+            minimum_extract_version,
+            flags,
+            compression_method,
+            last_modified_time,
+            last_modified_date,
+            crc32,
+            compressed_size,
+            uncompressed_size,
+            disk_number,
+            internal_file_attributes,
+            external_file_attributes,
+            local_header_offset,
+            file_name,
+            extra_field,
+            file_comment
+        })
     }
 }
