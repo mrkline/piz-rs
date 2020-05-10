@@ -23,6 +23,9 @@ fn main() -> Result<()> {
     let zip_file = File::open(zip_path).context("Couldn't open zip file")?;
     let mapping = unsafe { Mmap::map(&zip_file).context("Couldn't mmap zip file")? };
 
-    let _archive = ZipArchive::new(&mapping).context("Couldn't load archive")?;
+    let archive = ZipArchive::new(&mapping).context("Couldn't load archive")?;
+    for entry in archive.entries() {
+        eprintln!("{:?}", entry);
+    }
     Ok(())
 }

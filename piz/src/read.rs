@@ -9,33 +9,21 @@ use crate::spec;
 pub enum CompressionMethod {
     None,
     Deflate,
-    Unsupported(u16)
+    Unsupported(u16),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum System
-{
+pub enum System {
     Dos,
     Unix,
     Unknown,
 }
 
-impl System {
-    pub fn from_u8(system: u8) -> System
-    {
-        use self::System::*;
-
-        match system {
-            0 => Dos,
-            3 => Unix,
-            _ => Unknown,
-        }
-    }
-}
+pub use spec::FileMetadata;
 
 pub struct ZipArchive<'a> {
     mapping: &'a [u8],
-    entries: Vec<spec::FileMetadata<'a>>,
+    entries: Vec<FileMetadata<'a>>,
 }
 
 impl<'a> ZipArchive<'a> {
@@ -44,7 +32,7 @@ impl<'a> ZipArchive<'a> {
         let eocdr = spec::EndOfCentralDirectory::parse(&mapping[eocdr_posit..])?;
         trace!("{:?}", eocdr);
 
-       if eocdr.disk_number != eocdr.disk_with_central_directory {
+        if eocdr.disk_number != eocdr.disk_with_central_directory {
             return Err(ZipError::UnsupportedArchive(format!(
                 "No support for multi-disk archives: disk ({}) != disk with central directory ({})",
                 eocdr.disk_number, eocdr.disk_with_central_directory
@@ -154,5 +142,9 @@ impl<'a> ZipArchive<'a> {
             return Err(ZipError::PrependedWithUnknownBytes(archive_offset));
         }
         Ok(new_archive)
+    }
+
+    pub fn entries(&self) -> &[FileMetadata] {
+        &self.entries
     }
 }

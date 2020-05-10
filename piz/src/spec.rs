@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::path::Path;
 use std::convert::TryInto;
 
 use codepage_437::*;
@@ -332,32 +333,45 @@ impl<'a> CentralDirectoryEntry<'a> {
 /// distilled down to stuff the rest of the library will use.
 #[derive(Debug)]
 pub struct FileMetadata<'a> {
+    /// Uncompressed size of the file in bytes
+    pub size: usize,
+    /// Compressed size of the file in bytes
+    pub compressed_size: usize,
+    /// Compression algorithm used to store the file
+    pub compression_method: CompressionMethod,
+    /// The CRC-32 of the decompressed file
+    pub crc32: u32,
+    /// True if the file is encrypted (decryption is unsupported)
+    pub encrypted: bool,
+    /// The provided path of the file.
+    pub file_name: Cow<'a, Path>,
     system: System,
-    size: usize,
-    compressed_size: usize,
-    compression_method: CompressionMethod,
-    crc32: u32,
-    encrypted: bool,
     header_offset: usize,
-    file_name: Cow<'a, str>,
     // TODO: Add other fields the user might want to know about:
     // time, etc.
 }
 
 impl<'a> FileMetadata<'a> {
-    pub fn from_cde(cde: &CentralDirectoryEntry<'a>) -> ZipResult<Self> {
+
+    pub(crate) fn from_cde(cde: &CentralDirectoryEntry<'a>) -> ZipResult<Self> {
         let is_utf8 = cde.flags & (1 << 11) != 0;
 
-        let file_name: Cow<str> = if is_utf8 {
-            Cow::from(std::str::from_utf8(cde.file_name).map_err(|e| ZipError::Encoding(e))?)
+        let file_name: Cow<Path> = if is_utf8 {
+            let utf8 = std::str::from_utf8(cde.file_name).map_err(|e| ZipError::Encoding(e))?;
+            Cow::Borrowed(Path::new(utf8))
         } else {
-            Cow::borrow_from_cp437(cde.file_name, &CP437_CONTROL)
+            let str_cow: Cow<str> = Cow::borrow_from_cp437(cde.file_name, &CP437_CONTROL);
+            // Annoying: doesn't seem to be any Cow<str> -> Cow<Path>
+            match str_cow {
+                Cow::Borrowed(s) => Cow::Borrowed(Path::new(s)),
+                Cow::Owned(s) => Cow::Owned(s.into())
+            }
         };
 
         if cde.disk_number != 0 {
             return Err(ZipError::UnsupportedArchive(format!(
                 "No support for multi-disk archives: file {} claims to be on disk {}",
-                file_name, cde.disk_number,
+                file_name.display(), cde.disk_number,
             )));
         }
 
@@ -377,8 +391,6 @@ impl<'a> FileMetadata<'a> {
             // 12 => CompressionMethod::Bzip2,
             v => CompressionMethod::Unsupported(v),
         };
-
-
 
         // 4.4.2.1 The upper byte indicates the compatibility of the file
         // attribute information.  If the external file attributes
@@ -426,17 +438,17 @@ impl<'a> FileMetadata<'a> {
 }
 
 fn parse_extra_field(metadata: &mut FileMetadata, mut extra_field: &[u8]) -> ZipResult<()> {
-   // 4.5.1 In order to allow different programs and different types
-   // of information to be stored in the 'extra' field in .ZIP
-   // files, the following structure MUST be used for all
-   // programs storing data in this field:
+    // 4.5.1 In order to allow different programs and different types
+    // of information to be stored in the 'extra' field in .ZIP
+    // files, the following structure MUST be used for all
+    // programs storing data in this field:
 
-   //     header1+data1 + header2+data2 . . .
+    //     header1+data1 + header2+data2 . . .
 
-   // Each header MUST consist of:
+    // Each header MUST consist of:
 
-   //     Header ID - 2 bytes
-   //     Data Size - 2 bytes
+    //     Header ID - 2 bytes
+    //     Data Size - 2 bytes
     while extra_field.len() > 0 {
         let kind = read_u16(&mut extra_field);
         let field_len = read_u16(&mut extra_field);
