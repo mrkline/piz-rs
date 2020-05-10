@@ -8,6 +8,7 @@ edition = "2018"
 
 [dependencies]
 codepage-437 = "0.1"
+flate2 = "1.0"
 log = "0.4"
 thiserror = "1.0"
 twoway = "0.2"

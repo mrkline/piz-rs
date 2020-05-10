@@ -4,8 +4,38 @@ use crate::arch::usize;
 use crate::result::*;
 use crate::spec;
 
+// Move types into some submodule if we have a handful?
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum CompressionMethod {
+    None,
+    Deflate,
+    Unsupported(u16)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum System
+{
+    Dos,
+    Unix,
+    Unknown,
+}
+
+impl System {
+    pub fn from_u8(system: u8) -> System
+    {
+        use self::System::*;
+
+        match system {
+            0 => Dos,
+            3 => Unix,
+            _ => Unknown,
+        }
+    }
+}
+
 pub struct ZipArchive<'a> {
     mapping: &'a [u8],
+    entries: Vec<spec::FileMetadata<'a>>,
 }
 
 impl<'a> ZipArchive<'a> {
@@ -14,7 +44,7 @@ impl<'a> ZipArchive<'a> {
         let eocdr = spec::EndOfCentralDirectory::parse(&mapping[eocdr_posit..])?;
         trace!("{:?}", eocdr);
 
-        if eocdr.disk_number != eocdr.disk_with_central_directory {
+       if eocdr.disk_number != eocdr.disk_with_central_directory {
             return Err(ZipError::UnsupportedArchive(format!(
                 "No support for multi-disk archives: disk ({}) != disk with central directory ({})",
                 eocdr.disk_number, eocdr.disk_with_central_directory
@@ -28,7 +58,7 @@ impl<'a> ZipArchive<'a> {
         }
 
         let nominal_central_directory_offset: usize;
-        let entries: u64;
+        let entry_count: u64;
 
         // Zip files can be prepended by arbitrary junk,
         // so all the given positions might be off.
@@ -80,7 +110,7 @@ impl<'a> ZipArchive<'a> {
             trace!("{:?}", zip64_eocdr);
 
             nominal_central_directory_offset = usize(zip64_eocdr.central_directory_offset)?;
-            entries = zip64_eocdr.entries;
+            entry_count = zip64_eocdr.entries;
         } else {
             // The offset is the actual position versus the stored one.
             let actual_cdr_posit = eocdr_posit.checked_sub(usize(eocdr.central_directory_size)?);
@@ -91,31 +121,31 @@ impl<'a> ZipArchive<'a> {
                     "Invalid central directory size or offset",
                 ))?;
             nominal_central_directory_offset = usize(eocdr.central_directory_offset)?;
-            entries = eocdr.entries as u64;
+            entry_count = eocdr.entries as u64;
         }
 
         mapping = &mapping[archive_offset..];
         trace!(
             "{} entries at nominal offset {}",
-            entries,
+            entry_count,
             nominal_central_directory_offset
         );
 
         let mut central_directory = &mapping[nominal_central_directory_offset..];
 
-        let mut contents = Vec::new();
-        contents.reserve(usize(entries)?);
+        let mut entries = Vec::new();
+        entries.reserve(usize(entry_count)?);
 
-        for _ in 0..entries {
+        for _ in 0..entry_count {
             let dir_entry = spec::CentralDirectoryEntry::parse_and_consume(&mut central_directory)?;
             trace!("{:?}", dir_entry);
 
             let file_metadata = spec::FileMetadata::from_cde(&dir_entry)?;
             debug!("{:?}", file_metadata);
-            contents.push(file_metadata);
+            entries.push(file_metadata);
         }
 
-        Ok((ZipArchive { mapping }, archive_offset))
+        Ok((ZipArchive { mapping, entries }, archive_offset))
     }
 
     pub fn new(mapping: &'a [u8]) -> ZipResult<Self> {

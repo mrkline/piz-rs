@@ -14,7 +14,7 @@ fn main() -> Result<()> {
     }
 
     let mut errlog = stderrlog::new();
-    errlog.verbosity(4);
+    errlog.verbosity(3);
     errlog.init()?;
 
     let zip_path = &args[1];

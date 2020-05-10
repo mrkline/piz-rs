@@ -5,6 +5,7 @@ use codepage_437::*;
 use twoway::{find_bytes, rfind_bytes};
 
 use crate::arch::usize;
+use crate::read::{CompressionMethod, System};
 use crate::result::*;
 
 const EOCDR_MAGIC: [u8; 4] = [b'P', b'K', 5, 6];
@@ -327,16 +328,20 @@ impl<'a> CentralDirectoryEntry<'a> {
     }
 }
 
+/// Information from a file's CentralDirectoryEntry,
+/// distilled down to stuff the rest of the library will use.
 #[derive(Debug)]
 pub struct FileMetadata<'a> {
+    system: System,
     size: usize,
     compressed_size: usize,
+    compression_method: CompressionMethod,
     crc32: u32,
+    encrypted: bool,
     header_offset: usize,
-    // TODO: compression type
     file_name: Cow<'a, str>,
-    // TODO: Add other fields the user might want to know about,
-    // and getters in ZipFile.
+    // TODO: Add other fields the user might want to know about:
+    // time, etc.
 }
 
 impl<'a> FileMetadata<'a> {
@@ -357,17 +362,59 @@ impl<'a> FileMetadata<'a> {
         }
 
         let encrypted = cde.flags & 1 == 1;
+        /* When we try to read; don't bomb if the archive has _any_ encrypted file
         if encrypted {
             return Err(ZipError::UnsupportedArchive(format!(
                 "No support for encrypted files, as {} claims to be",
                 file_name
             )));
         }
+        */
+
+        let compression_method = match cde.compression_method {
+            0 => CompressionMethod::None,
+            8 => CompressionMethod::Deflate,
+            // 12 => CompressionMethod::Bzip2,
+            v => CompressionMethod::Unsupported(v),
+        };
+
+
+
+        // 4.4.2.1 The upper byte indicates the compatibility of the file
+        // attribute information.  If the external file attributes
+        // are compatible with MS-DOS and can be read by PKZIP for
+        // DOS version 2.04g then this value will be zero.  If these
+        // attributes are not compatible, then this value will
+        // identify the host system on which the attributes are
+        // compatible.  Software can use this information to determine
+        // the line record format for text files etc.
+
+        // 4.4.2.2 The current mappings are:
+
+        //  0 - MS-DOS and OS/2 (FAT / VFAT / FAT32 file systems)
+        //  1 - Amiga                     2 - OpenVMS
+        //  3 - UNIX                      4 - VM/CMS
+        //  5 - Atari ST                  6 - OS/2 H.P.F.S.
+        //  7 - Macintosh                 8 - Z-System
+        //  9 - CP/M                     10 - Windows NTFS
+        // 11 - MVS (OS/390 - Z/OS)      12 - VSE
+        // 13 - Acorn Risc               14 - VFAT
+        // 15 - alternate MVS            16 - BeOS
+        // 17 - Tandem                   18 - OS/400
+        // 19 - OS X (Darwin)            20 thru 255 - unused
+        let system = match cde.source_version >> 8 {
+            0 => System::Dos,
+            3 => System::Unix,
+            _ => System::Unknown,
+        };
 
         let mut metadata = Self {
+            system,
             size: usize(cde.uncompressed_size)?,
             compressed_size: usize(cde.compressed_size)?,
+            compression_method,
             crc32: cde.crc32,
+            encrypted,
             header_offset: usize(cde.header_offset)?,
             file_name,
         };

@@ -1,6 +1,9 @@
 pub mod read;
 pub mod result;
 
+pub use read::CompressionMethod;
+pub use read::ZipArchive;
+
 mod arch;
 mod spec;
 
