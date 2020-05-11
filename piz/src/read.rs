@@ -1,3 +1,6 @@
+use std::borrow::Cow;
+use std::path::Path;
+
 use log::*;
 
 use crate::arch::usize;
@@ -19,7 +22,28 @@ pub enum System {
     Unknown,
 }
 
-pub use spec::FileMetadata;
+/// Information from a file's CentralDirectoryEntry,
+/// distilled down to stuff the rest of the library will use.
+#[derive(Debug)]
+pub struct FileMetadata<'a> {
+    /// Uncompressed size of the file in bytes
+    pub size: usize,
+    /// Compressed size of the file in bytes
+    pub compressed_size: usize,
+    /// Compression algorithm used to store the file
+    pub compression_method: CompressionMethod,
+    /// The CRC-32 of the decompressed file
+    pub crc32: u32,
+    /// True if the file is encrypted (decryption is unsupported)
+    pub encrypted: bool,
+    /// The provided path of the file.
+    pub file_name: Cow<'a, Path>,
+    pub(crate) system: System,
+    pub(crate) header_offset: usize,
+    // TODO: Add other fields the user might want to know about:
+    // time, etc.
+}
+
 
 pub struct ZipArchive<'a> {
     mapping: &'a [u8],
@@ -128,7 +152,7 @@ impl<'a> ZipArchive<'a> {
             let dir_entry = spec::CentralDirectoryEntry::parse_and_consume(&mut central_directory)?;
             trace!("{:?}", dir_entry);
 
-            let file_metadata = spec::FileMetadata::from_cde(&dir_entry)?;
+            let file_metadata = FileMetadata::from_cde(&dir_entry)?;
             debug!("{:?}", file_metadata);
             entries.push(file_metadata);
         }
@@ -146,5 +170,13 @@ impl<'a> ZipArchive<'a> {
 
     pub fn entries(&self) -> &[FileMetadata] {
         &self.entries
+    }
+
+    pub fn read(&self, metadata: &FileMetadata) -> ZipResult<()> {
+        // TODO: Compare CDE against local file header to ensure they're the same.
+        let mut file_slice = &self.mapping[metadata.header_offset..];
+        let local_header = spec::LocalFileHeader::parse_and_consume(&mut file_slice)?;
+        trace!("{:?}", local_header);
+        Ok(())
     }
 }

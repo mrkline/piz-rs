@@ -14,7 +14,7 @@ fn main() -> Result<()> {
     }
 
     let mut errlog = stderrlog::new();
-    errlog.verbosity(3);
+    errlog.verbosity(4);
     errlog.init()?;
 
     let zip_path = &args[1];
@@ -26,6 +26,7 @@ fn main() -> Result<()> {
     let archive = ZipArchive::new(&mapping).context("Couldn't load archive")?;
     for entry in archive.entries() {
         eprintln!("{:?}", entry);
+        archive.read(entry)?;
     }
     Ok(())
 }

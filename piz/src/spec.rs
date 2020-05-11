@@ -6,13 +6,25 @@ use codepage_437::*;
 use twoway::{find_bytes, rfind_bytes};
 
 use crate::arch::usize;
-use crate::read::{CompressionMethod, System};
+use crate::read::{CompressionMethod, FileMetadata, System};
 use crate::result::*;
 
 const EOCDR_MAGIC: [u8; 4] = [b'P', b'K', 5, 6];
 const ZIP64_EOCDR_MAGIC: [u8; 4] = [b'P', b'K', 6, 6];
 const ZIP64_EOCDR_LOCATOR_MAGIC: [u8; 4] = [b'P', b'K', 6, 7];
 const CENTRAL_DIRECTORY_MAGIC: [u8; 4] = [b'P', b'K', 1, 2];
+const LOCAL_FILE_HEADER_MAGIC: [u8; 4] = [b'P', b'K', 3, 4];
+
+impl CompressionMethod {
+    fn from_u16(u: u16) -> Self {
+        match u {
+            0 => CompressionMethod::None,
+            8 => CompressionMethod::Deflate,
+            // 12 => CompressionMethod::Bzip2,
+            v => CompressionMethod::Unsupported(v),
+        }
+    }
+}
 
 // Straight from the Rust docs:
 fn read_u64(input: &mut &[u8]) -> u64 {
@@ -329,28 +341,6 @@ impl<'a> CentralDirectoryEntry<'a> {
     }
 }
 
-/// Information from a file's CentralDirectoryEntry,
-/// distilled down to stuff the rest of the library will use.
-#[derive(Debug)]
-pub struct FileMetadata<'a> {
-    /// Uncompressed size of the file in bytes
-    pub size: usize,
-    /// Compressed size of the file in bytes
-    pub compressed_size: usize,
-    /// Compression algorithm used to store the file
-    pub compression_method: CompressionMethod,
-    /// The CRC-32 of the decompressed file
-    pub crc32: u32,
-    /// True if the file is encrypted (decryption is unsupported)
-    pub encrypted: bool,
-    /// The provided path of the file.
-    pub file_name: Cow<'a, Path>,
-    system: System,
-    header_offset: usize,
-    // TODO: Add other fields the user might want to know about:
-    // time, etc.
-}
-
 impl<'a> FileMetadata<'a> {
 
     pub(crate) fn from_cde(cde: &CentralDirectoryEntry<'a>) -> ZipResult<Self> {
@@ -385,12 +375,7 @@ impl<'a> FileMetadata<'a> {
         }
         */
 
-        let compression_method = match cde.compression_method {
-            0 => CompressionMethod::None,
-            8 => CompressionMethod::Deflate,
-            // 12 => CompressionMethod::Bzip2,
-            v => CompressionMethod::Unsupported(v),
-        };
+        let compression_method = CompressionMethod::from_u16(cde.compression_method);
 
         // 4.4.2.1 The upper byte indicates the compatibility of the file
         // attribute information.  If the external file attributes
@@ -481,4 +466,67 @@ fn parse_extra_field(metadata: &mut FileMetadata, mut extra_field: &[u8]) -> Zip
         extra_field = &extra_field[amount_left as usize..];
     }
     Ok(())
+}
+
+#[derive(Debug)]
+pub struct LocalFileHeader<'a> {
+    pub minimum_extract_version: u16,
+    pub flags: u16,
+    pub compression_method: u16,
+    pub last_modified_time: u16,
+    pub last_modified_date: u16,
+    pub crc32: u32,
+    pub compressed_size: u32,
+    pub uncompressed_size: u32,
+    pub file_name: &'a [u8],
+    pub extra_field: &'a [u8],
+}
+
+impl<'a> LocalFileHeader<'a> {
+    pub fn parse_and_consume(header: &mut &'a [u8]) -> ZipResult<Self> {
+        // 4.3.7  Local file header:
+        //
+        // local file header signature     4 bytes  (0x04034b50)
+        // version needed to extract       2 bytes
+        // general purpose bit flag        2 bytes
+        // compression method              2 bytes
+        // last mod file time              2 bytes
+        // last mod file date              2 bytes
+        // crc-32                          4 bytes
+        // compressed size                 4 bytes
+        // uncompressed size               4 bytes
+        // file name length                2 bytes
+        // extra field length              2 bytes
+        //
+        // file name (variable size)
+        // extra field (variable size)
+        assert_eq!(header[..4], LOCAL_FILE_HEADER_MAGIC);
+        *header = &header[4..];
+        let minimum_extract_version = read_u16(header);
+        let flags = read_u16(header);
+        let compression_method = read_u16(header);
+        let last_modified_time = read_u16(header);
+        let last_modified_date = read_u16(header);
+        let crc32 = read_u32(header);
+        let compressed_size = read_u32(header);
+        let uncompressed_size = read_u32(header);
+        let file_name_length = usize(read_u16(header))?;
+        let extra_field_length = usize(read_u16(header))?;
+        let (file_name, remaining) = header.split_at(file_name_length);
+        let (extra_field, remaining) = remaining.split_at(extra_field_length);
+        *header = remaining;
+
+        Ok(Self {
+            minimum_extract_version,
+            flags,
+            compression_method,
+            last_modified_time,
+            last_modified_date,
+            crc32,
+            compressed_size,
+            uncompressed_size,
+            file_name,
+            extra_field,
+        })
+    }
 }
