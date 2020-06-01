@@ -26,7 +26,15 @@ fn main() -> Result<()> {
     let archive = ZipArchive::new(&mapping).context("Couldn't load archive")?;
     for entry in archive.entries() {
         eprintln!("{:?}", entry);
-        archive.read(entry)?;
+        let mut reader = archive.read(entry)?;
+        let mut file_contents = Vec::new();
+        reader.read_to_end(&mut file_contents)?;
+        if file_contents.is_empty() {
+            println!("{} is a directory", entry.file_name.display());
+        }
+        else {
+            println!("{}", std::str::from_utf8(&file_contents).unwrap());
+        }
     }
     Ok(())
 }

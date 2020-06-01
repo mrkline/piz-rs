@@ -1,9 +1,12 @@
 use std::borrow::Cow;
+use std::io;
 use std::path::Path;
 
+use flate2::read::DeflateDecoder;
 use log::*;
 
 use crate::arch::usize;
+use crate::crc_reader::Crc32Reader;
 use crate::result::*;
 use crate::spec;
 
@@ -170,7 +173,7 @@ impl<'a> ZipArchive<'a> {
         &self.entries
     }
 
-    pub fn read(&self, metadata: &FileMetadata) -> ZipResult<()> {
+    pub fn read(&self, metadata: &FileMetadata) -> ZipResult<Box<dyn io::Read + 'a>> {
         // TODO: Compare CDE against local file header to ensure they're the same.
         let mut file_slice = &self.mapping[metadata.header_offset..];
         let local_header = spec::LocalFileHeader::parse_and_consume(&mut file_slice)?;
@@ -182,6 +185,35 @@ impl<'a> ZipArchive<'a> {
                 "Central directory entry doesn't match local file header",
             ));
         }
-        Ok(())
+
+        if metadata.encrypted {
+            return Err(ZipError::UnsupportedArchive(format!(
+                "Can't read encrypted file {}",
+                metadata.file_name.display()
+            )));
+        }
+
+        make_reader(
+            metadata.compression_method,
+            metadata.crc32,
+            io::Cursor::new(&file_slice[0..metadata.compressed_size]),
+        )
+    }
+}
+
+fn make_reader<'a, R: io::Read + 'a>(
+    compression_method: CompressionMethod,
+    crc32: u32,
+    reader: R,
+) -> ZipResult<Box<dyn io::Read + 'a>> {
+    match compression_method {
+        CompressionMethod::None => Ok(Box::new(Crc32Reader::new(reader, crc32))),
+        CompressionMethod::Deflate => {
+            let deflate_reader = DeflateDecoder::new(reader);
+            Ok(Box::new(Crc32Reader::new(deflate_reader, crc32)))
+        }
+        _ => Err(ZipError::UnsupportedArchive(String::from(
+            "Compression method not supported",
+        ))),
     }
 }
