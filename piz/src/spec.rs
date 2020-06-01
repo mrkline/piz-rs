@@ -1,6 +1,6 @@
 use std::borrow::Cow;
-use std::path::Path;
 use std::convert::TryInto;
+use std::path::Path;
 
 use codepage_437::*;
 use twoway::{find_bytes, rfind_bytes};
@@ -22,6 +22,39 @@ impl CompressionMethod {
             8 => CompressionMethod::Deflate,
             // 12 => CompressionMethod::Bzip2,
             v => CompressionMethod::Unsupported(v),
+        }
+    }
+}
+
+#[allow(dead_code)]
+impl System {
+    fn from_source_version(source_version: u16) -> Self {
+        // 4.4.2.1 The upper byte indicates the compatibility of the file
+        // attribute information.  If the external file attributes
+        // are compatible with MS-DOS and can be read by PKZIP for
+        // DOS version 2.04g then this value will be zero.  If these
+        // attributes are not compatible, then this value will
+        // identify the host system on which the attributes are
+        // compatible.  Software can use this information to determine
+        // the line record format for text files etc.
+        //
+        // 4.4.2.2 The current mappings are:
+        //
+        //  0 - MS-DOS and OS/2 (FAT / VFAT / FAT32 file systems)
+        //  1 - Amiga                     2 - OpenVMS
+        //  3 - UNIX                      4 - VM/CMS
+        //  5 - Atari ST                  6 - OS/2 H.P.F.S.
+        //  7 - Macintosh                 8 - Z-System
+        //  9 - CP/M                     10 - Windows NTFS
+        // 11 - MVS (OS/390 - Z/OS)      12 - VSE
+        // 13 - Acorn Risc               14 - VFAT
+        // 15 - alternate MVS            16 - BeOS
+        // 17 - Tandem                   18 - OS/400
+        // 19 - OS X (Darwin)            20 thru 255 - unused
+        match source_version >> 8 {
+            0 => System::Dos,
+            3 => System::Unix,
+            _ => System::Unknown,
         }
     }
 }
@@ -341,10 +374,17 @@ impl<'a> CentralDirectoryEntry<'a> {
     }
 }
 
-impl<'a> FileMetadata<'a> {
+fn is_utf8(flags: u16) -> bool {
+    flags & (1 << 11) != 0
+}
 
+fn is_encrypted(flags: u16) -> bool {
+    flags & 1 != 0
+}
+
+impl<'a> FileMetadata<'a> {
     pub(crate) fn from_cde(cde: &CentralDirectoryEntry<'a>) -> ZipResult<Self> {
-        let is_utf8 = cde.flags & (1 << 11) != 0;
+        let is_utf8 = is_utf8(cde.flags);
 
         let file_name: Cow<Path> = if is_utf8 {
             let utf8 = std::str::from_utf8(cde.file_name).map_err(|e| ZipError::Encoding(e))?;
@@ -354,18 +394,19 @@ impl<'a> FileMetadata<'a> {
             // Annoying: doesn't seem to be any Cow<str> -> Cow<Path>
             match str_cow {
                 Cow::Borrowed(s) => Cow::Borrowed(Path::new(s)),
-                Cow::Owned(s) => Cow::Owned(s.into())
+                Cow::Owned(s) => Cow::Owned(s.into()),
             }
         };
 
         if cde.disk_number != 0 {
             return Err(ZipError::UnsupportedArchive(format!(
                 "No support for multi-disk archives: file {} claims to be on disk {}",
-                file_name.display(), cde.disk_number,
+                file_name.display(),
+                cde.disk_number,
             )));
         }
 
-        let encrypted = cde.flags & 1 == 1;
+        let encrypted = is_encrypted(cde.flags);
         /* When we try to read; don't bomb if the archive has _any_ encrypted file
         if encrypted {
             return Err(ZipError::UnsupportedArchive(format!(
@@ -377,36 +418,7 @@ impl<'a> FileMetadata<'a> {
 
         let compression_method = CompressionMethod::from_u16(cde.compression_method);
 
-        // 4.4.2.1 The upper byte indicates the compatibility of the file
-        // attribute information.  If the external file attributes
-        // are compatible with MS-DOS and can be read by PKZIP for
-        // DOS version 2.04g then this value will be zero.  If these
-        // attributes are not compatible, then this value will
-        // identify the host system on which the attributes are
-        // compatible.  Software can use this information to determine
-        // the line record format for text files etc.
-
-        // 4.4.2.2 The current mappings are:
-
-        //  0 - MS-DOS and OS/2 (FAT / VFAT / FAT32 file systems)
-        //  1 - Amiga                     2 - OpenVMS
-        //  3 - UNIX                      4 - VM/CMS
-        //  5 - Atari ST                  6 - OS/2 H.P.F.S.
-        //  7 - Macintosh                 8 - Z-System
-        //  9 - CP/M                     10 - Windows NTFS
-        // 11 - MVS (OS/390 - Z/OS)      12 - VSE
-        // 13 - Acorn Risc               14 - VFAT
-        // 15 - alternate MVS            16 - BeOS
-        // 17 - Tandem                   18 - OS/400
-        // 19 - OS X (Darwin)            20 thru 255 - unused
-        let system = match cde.source_version >> 8 {
-            0 => System::Dos,
-            3 => System::Unix,
-            _ => System::Unknown,
-        };
-
         let mut metadata = Self {
-            system,
             size: usize(cde.uncompressed_size)?,
             compressed_size: usize(cde.compressed_size)?,
             compression_method,
@@ -417,6 +429,48 @@ impl<'a> FileMetadata<'a> {
         };
 
         parse_extra_field(&mut metadata, cde.extra_field)?;
+
+        Ok(metadata)
+    }
+
+    /// Extract metadata from a local file header.
+    ///
+    /// Since the local header doesn't contain the offset
+    /// (we're at it already if we're reading the thing),
+    /// take the CDE-provided offset as an argument.
+    pub(crate) fn from_local_header(
+        local: &LocalFileHeader<'a>,
+        header_offset: usize,
+    ) -> ZipResult<Self> {
+        let is_utf8 = is_utf8(local.flags);
+
+        let file_name: Cow<Path> = if is_utf8 {
+            let utf8 = std::str::from_utf8(local.file_name).map_err(|e| ZipError::Encoding(e))?;
+            Cow::Borrowed(Path::new(utf8))
+        } else {
+            let str_cow: Cow<str> = Cow::borrow_from_cp437(local.file_name, &CP437_CONTROL);
+            // Annoying: doesn't seem to be any Cow<str> -> Cow<Path>
+            match str_cow {
+                Cow::Borrowed(s) => Cow::Borrowed(Path::new(s)),
+                Cow::Owned(s) => Cow::Owned(s.into()),
+            }
+        };
+
+        let encrypted = is_encrypted(local.flags);
+
+        let compression_method = CompressionMethod::from_u16(local.compression_method);
+
+        let mut metadata = Self {
+            size: usize(local.uncompressed_size)?,
+            compressed_size: usize(local.compressed_size)?,
+            compression_method,
+            crc32: local.crc32,
+            encrypted,
+            header_offset,
+            file_name,
+        };
+
+        parse_extra_field(&mut metadata, local.extra_field)?;
 
         Ok(metadata)
     }

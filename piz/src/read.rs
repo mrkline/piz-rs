@@ -24,7 +24,7 @@ pub enum System {
 
 /// Information from a file's CentralDirectoryEntry,
 /// distilled down to stuff the rest of the library will use.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct FileMetadata<'a> {
     /// Uncompressed size of the file in bytes
     pub size: usize,
@@ -38,12 +38,10 @@ pub struct FileMetadata<'a> {
     pub encrypted: bool,
     /// The provided path of the file.
     pub file_name: Cow<'a, Path>,
-    pub(crate) system: System,
     pub(crate) header_offset: usize,
     // TODO: Add other fields the user might want to know about:
     // time, etc.
 }
-
 
 pub struct ZipArchive<'a> {
     mapping: &'a [u8],
@@ -177,6 +175,13 @@ impl<'a> ZipArchive<'a> {
         let mut file_slice = &self.mapping[metadata.header_offset..];
         let local_header = spec::LocalFileHeader::parse_and_consume(&mut file_slice)?;
         trace!("{:?}", local_header);
+        let local_metadata =
+            FileMetadata::from_local_header(&local_header, metadata.header_offset)?;
+        if *metadata != local_metadata {
+            return Err(ZipError::InvalidArchive(
+                "Central directory entry doesn't match local file header",
+            ));
+        }
         Ok(())
     }
 }
