@@ -12,3 +12,4 @@ anyhow = "1.0"
 memmap = "0.7"
 stderrlog = "0.4"
 piz = { path = "../piz" }
+rayon = "1.0"

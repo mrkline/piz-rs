@@ -173,7 +173,7 @@ impl<'a> ZipArchive<'a> {
         &self.entries
     }
 
-    pub fn read(&self, metadata: &FileMetadata) -> ZipResult<Box<dyn io::Read + 'a>> {
+    pub fn read(&self, metadata: &FileMetadata) -> ZipResult<Box<dyn io::Read + Send + 'a>> {
         // TODO: Compare CDE against local file header to ensure they're the same.
         let mut file_slice = &self.mapping[metadata.header_offset..];
         let local_header = spec::LocalFileHeader::parse_and_consume(&mut file_slice)?;
@@ -201,11 +201,11 @@ impl<'a> ZipArchive<'a> {
     }
 }
 
-fn make_reader<'a, R: io::Read + 'a>(
+fn make_reader<'a, R: io::Read + Send + 'a>(
     compression_method: CompressionMethod,
     crc32: u32,
     reader: R,
-) -> ZipResult<Box<dyn io::Read + 'a>> {
+) -> ZipResult<Box<dyn io::Read + Send + 'a>> {
     match compression_method {
         CompressionMethod::None => Ok(Box::new(Crc32Reader::new(reader, crc32))),
         CompressionMethod::Deflate => {
