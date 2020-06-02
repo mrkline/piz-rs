@@ -1,5 +1,6 @@
 [workspace]
 members = [
     "piz",
-    "test_suite",
+    "test_harness",
+    "zip_probe",
 ]
