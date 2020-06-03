@@ -189,13 +189,12 @@ impl<'a> ZipArchive<'a> {
     }
 
     pub fn read(&self, metadata: &FileMetadata) -> ZipResult<Box<dyn io::Read + Send + 'a>> {
-        // TODO: Compare CDE against local file header to ensure they're the same.
         let mut file_slice = &self.mapping[metadata.header_offset..];
         let local_header = spec::LocalFileHeader::parse_and_consume(&mut file_slice)?;
         trace!("{:?}", local_header);
         let local_metadata =
             FileMetadata::from_local_header(&local_header, metadata.header_offset)?;
-        debug!("{:?}", local_metadata);
+        debug!("Reading {:?}", local_metadata);
         if *metadata != local_metadata {
             return Err(ZipError::InvalidArchive(
                 "Central directory entry doesn't match local file header",
