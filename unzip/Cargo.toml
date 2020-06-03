@@ -1,5 +1,5 @@
 [package]
-name = "zip_probe"
+name = "unzip"
 version = "0.1.0"
 authors = ["Matt Kline <matt@bitbashing.io>"]
 edition = "2018"

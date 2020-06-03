@@ -46,6 +46,21 @@ pub struct FileMetadata<'a> {
     // time, etc.
 }
 
+impl<'a> FileMetadata<'a> {
+    pub fn is_dir(&self) -> bool {
+        // Path::ends_with() doesn't consider separators,
+        // so we need a different approach.
+        // to_str().unwrap() is safe since the provided string was UTF-8,
+        // or was decoded from CP437.
+        let filename_str = self.file_name.to_str().unwrap();
+        self.size == 0 && filename_str.ends_with('/')
+    }
+
+    pub fn is_file(&self) -> bool {
+        !self.is_dir()
+    }
+}
+
 pub struct ZipArchive<'a> {
     mapping: &'a [u8],
     entries: Vec<FileMetadata<'a>>,

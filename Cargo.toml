@@ -2,5 +2,5 @@
 members = [
     "piz",
     "test_harness",
-    "zip_probe",
+    "unzip",
 ]

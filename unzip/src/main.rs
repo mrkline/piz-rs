@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -10,10 +10,7 @@ use structopt::*;
 use piz::read::ZipArchive;
 
 #[derive(Debug, StructOpt)]
-#[structopt(
-    name = "zip_probe",
-    about = "Examines a .zip file and reads its contents into the void"
-)]
+#[structopt(name = "unzip", about = "Dumps a .zip file into the current directory")]
 struct Opt {
     /// Pass multiple times for additional verbosity (info, debug, trace)
     #[structopt(short, long, parse(from_occurrences))]
@@ -38,11 +35,20 @@ fn read_zip(zip_path: &Path) -> Result<()> {
     let zip_file = File::open(zip_path).context("Couldn't open zip file")?;
     let mapping = unsafe { Mmap::map(&zip_file).context("Couldn't mmap zip file")? };
 
-    let archive = ZipArchive::with_prepended_data(&mapping).context("Couldn't load archive")?.0;
+    let archive = ZipArchive::with_prepended_data(&mapping)
+        .context("Couldn't load archive")?
+        .0;
     for entry in archive.entries() {
-        let mut reader = archive.read(entry)?;
-        let mut sink = io::sink();
-        io::copy(&mut reader, &mut sink)?;
+        if entry.is_dir() {
+            fs::create_dir_all(&entry.file_name).with_context(|| {
+                format!("Couldn't create directory {}", entry.file_name.display())
+            })?;
+        } else {
+            let mut reader = archive.read(entry)?;
+            let mut sink = File::create(&entry.file_name)
+                .with_context(|| format!("Couldn't create file {}", entry.file_name.display()))?;
+            io::copy(&mut reader, &mut sink)?;
+        }
     }
     Ok(())
 }
