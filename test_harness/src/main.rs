@@ -56,18 +56,16 @@ fn read_zip(zip_path: &Path) -> Result<()> {
     let zip_file = File::open(zip_path).context("Couldn't open zip file")?;
     let mapping = unsafe { Mmap::map(&zip_file).context("Couldn't mmap zip file")? };
 
-    let archive = ZipArchive::with_prepended_data(&mapping).context("Couldn't load archive")?.0;
-    let readers: Vec<_> = archive
+    let archive = ZipArchive::with_prepended_data(&mapping)
+        .context("Couldn't load archive")?
+        .0;
+    archive
         .entries()
-        .iter()
-        .map(|e| archive.read(e).unwrap())
-        .collect();
-    // Look, ma, readers are Send so we can read several in parallel!
-    readers
         .into_par_iter()
-        .try_for_each::<_, Result<()>>(|mut reader| {
+        .try_for_each::<_, Result<()>>(|entry| {
+            let mut reader = archive.read(entry)?;
             let mut sink = io::sink();
             io::copy(&mut reader, &mut sink)?;
             Ok(())
-        })
+        })?;
 }
