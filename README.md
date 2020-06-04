@@ -5,20 +5,25 @@ concurrently using a simple API:
 ```rust
 // For smaller files,
 //
-// let bytes = fs::read("foo.zip")
-// let archive = ZipArchive::new(&bytes)?;
+//     let bytes = fs::read("foo.zip")
+//     let archive = ZipArchive::new(&bytes)?;
 //
 // works just fine. For larger ones, memory map!
 let zip_file = File::open("foo.zip")?;
 let mapping = unsafe { Mmap::map(&zip_file)? };
 let archive = ZipArchive::new(&mapping)?;
 
-// This loop is trivially paralellizable with something like Rayon's
-// into_par_iter():
-for entry in archive.entries() {
+// Look, ma, reading files in parallel! Using Rayon:
+archive.entries().into_par_iter().try_for_each(|entry| {
     let mut reader = archive.read(entry)?;
     // reader implements Read, so read away!
-}
+});
+
+// If you don't care about parallelism, a simple loop will do:
+//     for entry in archive.entries() {
+//         let mut reader = archive.read(entry)?;
+//         // Read away!
+//     }
 ```
 
 Zip is an interesting archive format: unlike compressed tarballs often seen
