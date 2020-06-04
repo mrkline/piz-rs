@@ -16,6 +16,10 @@ struct Opt {
     #[structopt(short, long, parse(from_occurrences))]
     verbosity: usize,
 
+    /// Change to the given directory before perfoming any operations.
+    #[structopt(short = "C", long)]
+    directory: Option<PathBuf>,
+
     #[structopt(name("ZIP file"))]
     zip_path: PathBuf,
 }
@@ -26,6 +30,11 @@ fn main() -> Result<()> {
     let mut errlog = stderrlog::new();
     errlog.verbosity(args.verbosity + 1);
     errlog.init()?;
+
+    if let Some(chto) = args.directory {
+        std::env::set_current_dir(&chto)
+            .with_context(|| format!("Couldn't set working directory to {}", chto.display()))?;
+    }
 
     read_zip(&args.zip_path)
 }
