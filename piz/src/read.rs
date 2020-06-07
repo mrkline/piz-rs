@@ -71,7 +71,6 @@ pub struct ZipArchive<'a> {
 }
 
 impl<'a> ZipArchive<'a> {
-
     /// Reads a ZIP archive from a byte slice.
     /// Smaller files can be read into a buffer.
     ///
@@ -90,7 +89,6 @@ impl<'a> ZipArchive<'a> {
         }
         Ok(new_archive)
     }
-
 
     /// Like `ZipArchive::new()`, but allows arbitrary data to prepend the archive.
     /// Returns the ZipArchive and the number of bytes prepended to the archive.

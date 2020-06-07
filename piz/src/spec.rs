@@ -403,7 +403,7 @@ impl<'a> FileMetadata<'a> {
         let is_utf8 = is_utf8(cde.flags);
 
         let file_name: Cow<Path> = if is_utf8 {
-            let utf8 = std::str::from_utf8(cde.file_name).map_err(|e| ZipError::Encoding(e))?;
+            let utf8 = std::str::from_utf8(cde.file_name).map_err(ZipError::Encoding)?;
             Cow::Borrowed(Path::new(utf8))
         } else {
             let str_cow: Cow<str> = Cow::borrow_from_cp437(cde.file_name, &CP437_CONTROL);
@@ -461,7 +461,7 @@ impl<'a> FileMetadata<'a> {
         let is_utf8 = is_utf8(local.flags);
 
         let file_name: Cow<Path> = if is_utf8 {
-            let utf8 = std::str::from_utf8(local.file_name).map_err(|e| ZipError::Encoding(e))?;
+            let utf8 = std::str::from_utf8(local.file_name).map_err(ZipError::Encoding)?;
             Cow::Borrowed(Path::new(utf8))
         } else {
             let str_cow: Cow<str> = Cow::borrow_from_cp437(local.file_name, &CP437_CONTROL);
@@ -504,34 +504,31 @@ fn parse_extra_field(metadata: &mut FileMetadata, mut extra_field: &[u8]) -> Zip
 
     //     Header ID - 2 bytes
     //     Data Size - 2 bytes
-    while extra_field.len() > 0 {
+    while !extra_field.is_empty() {
         let kind = read_u16(&mut extra_field);
         let field_len = read_u16(&mut extra_field);
 
         let mut amount_left = field_len as i16;
-        match kind {
-            // Zip64 extended information extra field
-            0x0001 => {
-                if metadata.size == u32::MAX as usize {
-                    metadata.size = usize(read_u64(&mut extra_field))?;
-                    amount_left -= 8;
-                }
-                if metadata.compressed_size == u32::MAX as usize {
-                    metadata.compressed_size = usize(read_u64(&mut extra_field))?;
-                    amount_left -= 8;
-                }
-                if metadata.header_offset == u32::MAX as usize {
-                    metadata.header_offset = usize(read_u64(&mut extra_field))?;
-                    amount_left -= 8;
-                }
-                // We already checked many times that this isn't a multi-disk archive.
-                if amount_left != 0 {
-                    return Err(ZipError::InvalidArchive(
-                        "Extra data field contains disk number",
-                    ));
-                }
+        // Zip64 extended information extra field
+        if kind == 0x0001 {
+            if metadata.size == u32::MAX as usize {
+                metadata.size = usize(read_u64(&mut extra_field))?;
+                amount_left -= 8;
             }
-            _ => {}
+            if metadata.compressed_size == u32::MAX as usize {
+                metadata.compressed_size = usize(read_u64(&mut extra_field))?;
+                amount_left -= 8;
+            }
+            if metadata.header_offset == u32::MAX as usize {
+                metadata.header_offset = usize(read_u64(&mut extra_field))?;
+                amount_left -= 8;
+            }
+            // We already checked many times that this isn't a multi-disk archive.
+            if amount_left != 0 {
+                return Err(ZipError::InvalidArchive(
+                    "Extra data field contains disk number",
+                ));
+            }
         }
         extra_field = &extra_field[amount_left as usize..];
     }
