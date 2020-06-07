@@ -67,5 +67,5 @@ fn read_zip(zip_path: &Path) -> Result<()> {
             let mut sink = io::sink();
             io::copy(&mut reader, &mut sink)?;
             Ok(())
-        })?;
+        })
 }

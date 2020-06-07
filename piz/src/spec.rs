@@ -6,13 +6,20 @@ use codepage_437::*;
 use twoway::{find_bytes, rfind_bytes};
 
 use crate::arch::usize;
-use crate::read::{CompressionMethod, FileMetadata, System};
+use crate::read::{CompressionMethod, FileMetadata};
 use crate::result::*;
 
+// Magic numbers denoting various sections of a ZIP archive
+
+/// End of central directory magic number
 const EOCDR_MAGIC: [u8; 4] = [b'P', b'K', 5, 6];
+/// Zip64 end of central directory magic number
 const ZIP64_EOCDR_MAGIC: [u8; 4] = [b'P', b'K', 6, 6];
+/// Zip64 end of central directory locator magic number
 const ZIP64_EOCDR_LOCATOR_MAGIC: [u8; 4] = [b'P', b'K', 6, 7];
+/// Central directory magic number
 const CENTRAL_DIRECTORY_MAGIC: [u8; 4] = [b'P', b'K', 1, 2];
+/// Local file header magic number
 const LOCAL_FILE_HEADER_MAGIC: [u8; 4] = [b'P', b'K', 3, 4];
 
 impl CompressionMethod {
@@ -24,6 +31,15 @@ impl CompressionMethod {
             v => CompressionMethod::Unsupported(v),
         }
     }
+}
+
+/// The OS a file in the archive was compressed with.
+/// Used to decode additional metadata like permissions
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum System {
+    Dos,
+    Unix,
+    Unknown,
 }
 
 #[allow(dead_code)]

@@ -11,22 +11,22 @@ use crate::result::*;
 use crate::spec;
 
 // Move types into some submodule if we have a handful?
+
+/// The compression method used to store a file
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum CompressionMethod {
+    /// The file is uncompressed
     None,
+    /// The file is [DEFLATE](https://en.wikipedia.org/wiki/DEFLATE)d.
+    /// This is the most common format used by ZIP archives.
     Deflate,
+    /// The file is compressed with a yet-unsupported format.
+    /// (The u16 indicates the internal format code.)
     Unsupported(u16),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum System {
-    Dos,
-    Unix,
-    Unknown,
-}
-
-/// Information from a file's CentralDirectoryEntry,
-/// distilled down to stuff the rest of the library will use.
+/// Metadata for a file or directory in the archive,
+/// retrieved from its central directory
 #[derive(Debug, PartialEq, Eq)]
 pub struct FileMetadata<'a> {
     /// Uncompressed size of the file in bytes
@@ -41,12 +41,14 @@ pub struct FileMetadata<'a> {
     pub encrypted: bool,
     /// The provided path of the file.
     pub file_name: Cow<'a, Path>,
+    /// The offset to the local file header in the archive
     pub(crate) header_offset: usize,
     // TODO: Add other fields the user might want to know about:
     // time, etc.
 }
 
 impl<'a> FileMetadata<'a> {
+    /// Returns true if the given entry is a directory
     pub fn is_dir(&self) -> bool {
         // Path::ends_with() doesn't consider separators,
         // so we need a different approach.
@@ -56,17 +58,46 @@ impl<'a> FileMetadata<'a> {
         self.size == 0 && filename_str.ends_with('/')
     }
 
+    /// Returns true if the given entry is a file
     pub fn is_file(&self) -> bool {
         !self.is_dir()
     }
 }
 
+/// A ZIP archive to be read
 pub struct ZipArchive<'a> {
     mapping: &'a [u8],
     entries: Vec<FileMetadata<'a>>,
 }
 
 impl<'a> ZipArchive<'a> {
+
+    /// Reads a ZIP archive from a byte slice.
+    /// Smaller files can be read into a buffer.
+    ///
+    ///     let bytes = fs::read("foo.zip")?;
+    ///     let archive = ZipArchive::new(&bytes)?;
+    ///
+    /// For larger ones, memory map!
+    ///
+    ///     let zip_file = File::open("foo.zip")?;
+    ///     let mapping = unsafe { Mmap::map(&zip_file)? };
+    ///     let archive = ZipArchive::new(&mapping)?;
+    pub fn new(mapping: &'a [u8]) -> ZipResult<Self> {
+        let (new_archive, archive_offset) = Self::with_prepended_data(mapping)?;
+        if archive_offset != 0 {
+            return Err(ZipError::PrependedWithUnknownBytes(archive_offset));
+        }
+        Ok(new_archive)
+    }
+
+
+    /// Like `ZipArchive::new()`, but allows arbitrary data to prepend the archive.
+    /// Returns the ZipArchive and the number of bytes prepended to the archive.
+    ///
+    /// Since a ZIP archive's metadata sits at the back of the file,
+    /// many formats consist of ZIP archives prepended with some other data.
+    /// For example, a self-extracting archive is one with an executable in the front.
     pub fn with_prepended_data(mut mapping: &'a [u8]) -> ZipResult<(Self, usize)> {
         let eocdr_posit = spec::find_eocdr(&mapping)?;
         let eocdr = spec::EndOfCentralDirectory::parse(&mapping[eocdr_posit..])?;
@@ -176,18 +207,19 @@ impl<'a> ZipArchive<'a> {
         Ok((ZipArchive { mapping, entries }, archive_offset))
     }
 
-    pub fn new(mapping: &'a [u8]) -> ZipResult<Self> {
-        let (new_archive, archive_offset) = Self::with_prepended_data(mapping)?;
-        if archive_offset != 0 {
-            return Err(ZipError::PrependedWithUnknownBytes(archive_offset));
-        }
-        Ok(new_archive)
-    }
-
+    /// Returns the entries found in the ZIP archive's central directory.
+    ///
+    /// No effort is made to deduplicate or otherwise validate these entries.
+    /// Future releases might provide helper functions that builds a tree of
+    /// these entries.
     pub fn entries(&self) -> &[FileMetadata] {
         &self.entries
     }
 
+    /// Reads the given file from the ZIP archive.
+    ///
+    /// Since each file in a ZIP archive is compressed independently,
+    /// multiple files can be read in parallel.
     pub fn read(&self, metadata: &FileMetadata) -> ZipResult<Box<dyn io::Read + Send + 'a>> {
         let mut file_slice = &self.mapping[metadata.header_offset..];
         let local_header = spec::LocalFileHeader::parse_and_consume(&mut file_slice)?;
