@@ -1,6 +1,7 @@
 //! Helper module to compute a CRC32 checksum
+//!
 //! Borrowed from zip-rs:
-//! https://github.com/mvdnes/zip-rs/commit/b3c836d9c32efa120cdd5366280f940d3c3b985c
+//! <https://github.com/mvdnes/zip-rs/commit/b3c836d9c32efa120cdd5366280f940d3c3b985c>
 
 use std::io;
 use std::io::prelude::*;
@@ -23,6 +24,7 @@ impl<R> Crc32Reader<R> {
         }
     }
 
+    /// Returns true if the final checksum matches the one provided by `new()`
     fn check_matches(&self) -> bool {
         self.provided_checksum == self.hasher.clone().finalize()
     }

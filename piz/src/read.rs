@@ -1,3 +1,11 @@
+//! Tools for reading a ZIP archive.
+//!
+//! Current versions of this library don't do any writing,
+//! but it was arranged to resemble the structure of the [Zip crate]
+//! and make room for potential future writing tools.
+//!
+//! [Zip crate]: https://crates.io/crates/zip
+
 use std::borrow::Cow;
 use std::io;
 use std::path::Path;
@@ -66,7 +74,9 @@ impl<'a> FileMetadata<'a> {
 
 /// A ZIP archive to be read
 pub struct ZipArchive<'a> {
+    /// The contents of the ZIP archive, as a byte slice.
     mapping: &'a [u8],
+    /// A list of entries from the ZIP's central directory
     entries: Vec<FileMetadata<'a>>,
 }
 
@@ -246,6 +256,8 @@ impl<'a> ZipArchive<'a> {
     }
 }
 
+/// Returns a boxed read trait for a compressed file,
+/// given its compression method and expected CRC.
 fn make_reader<'a, R: io::Read + Send + 'a>(
     compression_method: CompressionMethod,
     crc32: u32,

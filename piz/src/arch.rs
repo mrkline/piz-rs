@@ -1,9 +1,11 @@
+//! (Hopefully) handles 64-bit offsets gracefully on 32-bit platforms
+
 use crate::result::*;
 
 /// A checked cast from u64 to usize
 ///
-/// We could use the `cast` crate,
-/// (https://docs.rs/cast/0.2.3/cast/)
+/// We could use the `cast` crate
+/// (<https://docs.rs/cast/0.2.3/cast/>),
 /// but this is the only one we really need.
 pub fn usize<I: Into<u64>>(i: I) -> ZipResult<usize> {
     let i: u64 = i.into();

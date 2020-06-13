@@ -1,3 +1,18 @@
+//! Code specific to the ZIP file format specification.
+//!
+//! We try to keep the nitty gritty here,
+//! and higher-level stuff in the [`read`] module.
+//! (This pattern, like several others, was inspired by the Zip crate.)
+//!
+//! Most comments quote the ZIP spec, [`APPNOTE.TXT`].
+//!
+//! [_Zip Files: History, Explanation and Implementation_]
+//! is also a fantastic resource and a great read.
+//!
+//! [`read`]: ../read/index.html
+//! [`APPNOTE.TXT`]: https://pkware.cachefly.net/webdocs/APPNOTE/APPNOTE-6.3.6.TXT
+//! [_Zip Files: History, Explanation and Implementation_]: https://www.hanshq.net/zip.html
+
 use std::borrow::Cow;
 use std::convert::TryInto;
 use std::path::Path;
@@ -76,24 +91,33 @@ impl System {
 }
 
 // Straight from the Rust docs:
+
+/// Reads a little-endian u64 from the front of the provided slice, shrinking it.
 fn read_u64(input: &mut &[u8]) -> u64 {
     let (int_bytes, rest) = input.split_at(std::mem::size_of::<u64>());
     *input = rest;
     u64::from_le_bytes(int_bytes.try_into().expect("less than eight bytes for u64"))
 }
 
+/// Reads a little-endian u32 from the front of the provided slice, shrinking it.
 fn read_u32(input: &mut &[u8]) -> u32 {
     let (int_bytes, rest) = input.split_at(std::mem::size_of::<u32>());
     *input = rest;
     u32::from_le_bytes(int_bytes.try_into().expect("less than four bytes for u32"))
 }
 
+/// Reads a little-endian u16 from the front of the provided slice, shrinking it.
 fn read_u16(input: &mut &[u8]) -> u16 {
     let (int_bytes, rest) = input.split_at(std::mem::size_of::<u16>());
     *input = rest;
     u16::from_le_bytes(int_bytes.try_into().expect("less than two bytes for u16"))
 }
 
+/// Data from the End of central directory record
+///
+/// Found at the back of the ZIP archive and provides offsets for finding
+/// its central directory, along with lots of stuff that stopped being relevant
+/// when we stopped breaking ZIP archives onto multiple floppies.
 #[derive(Debug)]
 pub struct EndOfCentralDirectory<'a> {
     pub disk_number: u16,
@@ -148,12 +172,21 @@ impl<'a> EndOfCentralDirectory<'a> {
     }
 }
 
+/// Searches backward through `mapping` to find the
+/// End of central directory record.
+///
+/// It should be right at the end of the file,
+/// but its variable size means we can't jump to a known offset.
 pub fn find_eocdr(mapping: &[u8]) -> ZipResult<usize> {
     rfind_bytes(mapping, &EOCDR_MAGIC).ok_or(ZipError::InvalidArchive(
         "Couldn't find End Of Central Directory Record",
     ))
 }
 
+/// Data from the Zip64 end of central directory locator
+///
+/// This should immediately precede the End of central directory record
+/// on Zip64 files and tell us where to find the Zip64 end of central directory record.
 #[derive(Debug)]
 pub struct Zip64EndOfCentralDirectoryLocator {
     pub disk_with_central_directory: u32,
@@ -193,6 +226,10 @@ impl Zip64EndOfCentralDirectoryLocator {
     }
 }
 
+/// Data from the Zip64 end of central directory record
+///
+/// This should immediately precede the "End of central directory" record
+/// on Zip64 files and tell us where to find the Zip64 end of central directory record.
 #[derive(Debug)]
 pub struct Zip64EndOfCentralDirectory<'a> {
     pub source_version: u16,
@@ -284,12 +321,21 @@ impl<'a> Zip64EndOfCentralDirectory<'a> {
     }
 }
 
+/// Finds the Zip64 end of central directory record in the given slice.
+///
+/// The slice should start at the Zip64 EOCDR's nominal location,
+/// but we might have to do some searching since ZIP archives can have
+/// arbitrary junk up front.
 pub fn find_zip64_eocdr(mapping: &[u8]) -> ZipResult<usize> {
     find_bytes(mapping, &ZIP64_EOCDR_MAGIC).ok_or(ZipError::InvalidArchive(
         "Couldn't find zip64 End Of Central Directory Record",
     ))
 }
 
+/// Data from a central directory entry
+///
+/// Each of these records contians information about a file or folder
+/// stored in the ZIP archive.
 #[derive(Debug)]
 pub struct CentralDirectoryEntry<'a> {
     pub source_version: u16,
@@ -390,15 +436,24 @@ impl<'a> CentralDirectoryEntry<'a> {
     }
 }
 
+/// Extracts the "is this text UTF-8?" bit from the 16-bit flags field.
+///
+/// If false, text is assumped to be CP437.
 fn is_utf8(flags: u16) -> bool {
+    // Bit 11: Language encoding flag (EFS).  If this bit is set,
+    //         the filename and comment fields for this file
+    //         MUST be encoded using UTF-8. (see APPENDIX D)
     flags & (1 << 11) != 0
 }
 
+/// Extracts the "is this file encrypted?" bit from the 16-bit flags field.
 fn is_encrypted(flags: u16) -> bool {
+    // Bit 0: If set, indicates that the file is encrypted
     flags & 1 != 0
 }
 
 impl<'a> FileMetadata<'a> {
+    /// Extracts `FileMetadata` from a central directory entry
     pub(crate) fn from_cde(cde: &CentralDirectoryEntry<'a>) -> ZipResult<Self> {
         let is_utf8 = is_utf8(cde.flags);
 
@@ -492,6 +547,10 @@ impl<'a> FileMetadata<'a> {
     }
 }
 
+/// Parses the "extra fields" found in central directory entries
+/// and local file headers.
+///
+/// Currently we just look for Zip64 info (64-bit values for files > 2^32 in size)
 fn parse_extra_field(metadata: &mut FileMetadata, mut extra_field: &[u8]) -> ZipResult<()> {
     // 4.5.1 In order to allow different programs and different types
     // of information to be stored in the 'extra' field in .ZIP
@@ -535,6 +594,12 @@ fn parse_extra_field(metadata: &mut FileMetadata, mut extra_field: &[u8]) -> Zip
     Ok(())
 }
 
+/// Data from a local file header
+///
+/// Each files' actual contents is preceded by this header.
+/// These headers alllow for "streaming" decompression without
+/// the use of the central directory,
+/// but we don't make use of this feature.
 #[derive(Debug)]
 pub struct LocalFileHeader<'a> {
     pub minimum_extract_version: u16,
