@@ -1,10 +1,19 @@
 [package]
 name = "piz"
 version = "0.1.0"
-authors = ["Matt Kline <matt@bitbashing.io>"]
 edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+authors = ["Matt Kline <matt@bitbashing.io>"]
+license = "Zlib"
+repository = "https://github.com/mrkline/piz-rs"
+readme = "../README.md"
+documentation = "https://docs.rs/piz"
+description = """
+piz (a Parallel Implementation of Zip)
+is a ZIP archive reader designed to concurrently decompress files
+using a simple API.
+"""
+keywords = ["zip", "archive", "parallel", "thread", "concurrency"]
+categories = ["compression", "concurrency"]
 
 [dependencies]
 codepage-437 = "0.1"
