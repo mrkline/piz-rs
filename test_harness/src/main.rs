@@ -11,13 +11,17 @@ use structopt::*;
 
 use piz::read::ZipArchive;
 
+/// PIZ (Parallel Implementation of Zip) smoke tests
+///
+/// Unzip the following, printing as much info as you care to -v:
+///
+/// - A basic, "Hello, World!" archive with a few text files
+/// - Ditto, but with some bytes prepended to the front
+/// - A Zip64 archive (with files that don't fit in original 32-bit size fields)
 #[derive(Debug, StructOpt)]
-#[structopt(
-    name = "piz_testbench",
-    about = "PIZ (Parallel Implementation of Zip) tests"
-)]
+#[structopt(verbatim_doc_comment)]
 struct Opt {
-    /// Pass multiple times for additional verbosity (info, debug, trace)
+    /// Pass multiple times for more levels (info, debug, trace)
     #[structopt(short, long, parse(from_occurrences))]
     verbosity: usize,
 }
