@@ -9,7 +9,7 @@ use memmap::Mmap;
 use rayon::prelude::*;
 use structopt::*;
 
-use piz::read::ZipArchive;
+use piz::read::*;
 
 /// PIZ (Parallel Implementation of Zip) smoke tests
 ///
@@ -63,6 +63,9 @@ fn read_zip(zip_path: &Path) -> Result<()> {
     let archive = ZipArchive::with_prepended_data(&mapping)
         .context("Couldn't load archive")?
         .0;
+
+    let _tree = treeify(archive.entries())?;
+
     archive
         .entries()
         .into_par_iter()

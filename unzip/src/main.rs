@@ -7,7 +7,7 @@ use log::*;
 use memmap::Mmap;
 use structopt::*;
 
-use piz::read::ZipArchive;
+use piz::read::*;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "unzip", about = "Dumps a .zip file into the current directory")]
@@ -19,6 +19,10 @@ struct Opt {
     /// Change to the given directory before perfoming any operations.
     #[structopt(short = "C", long)]
     directory: Option<PathBuf>,
+
+    /// Prints the tree of files in the ZIP archive instead of extracting them.
+    #[structopt(short = "n", long)]
+    dry_run: bool,
 
     #[structopt(name("ZIP file"))]
     zip_path: PathBuf,
@@ -36,7 +40,44 @@ fn main() -> Result<()> {
             .with_context(|| format!("Couldn't set working directory to {}", chto.display()))?;
     }
 
-    read_zip(&args.zip_path)
+    if args.dry_run {
+        print_tree(&args.zip_path)
+    } else {
+        read_zip(&args.zip_path)
+    }
+}
+
+fn print_tree(zip_path: &Path) -> Result<()> {
+    info!("Memory mapping {:#?}", zip_path);
+    let zip_file = File::open(zip_path).context("Couldn't open zip file")?;
+    let mapping = unsafe { Mmap::map(&zip_file).context("Couldn't mmap zip file")? };
+
+    let archive = ZipArchive::with_prepended_data(&mapping)
+        .context("Couldn't load archive")?
+        .0;
+    let tree = treeify(archive.entries())?;
+    tree_recursor(&tree, 0);
+    Ok(())
+}
+
+fn tree_recursor(contents: &DirectoryContents, indent: usize) {
+    for (name, value) in contents {
+        /* With pipes:
+        let mut indentation = std::iter::repeat("| ").take(indent).collect::<String>();
+        indentation.pop();
+        println!("{}-{:?}", indentation, name);
+        */
+        let indentation = std::iter::repeat(' ').take(indent * 2).collect::<String>();
+        println!("{}{:?}", indentation, name);
+        match value {
+            DirectoryEntry::File(_f) => {
+                // println!("{}{:?}", indentation, f);
+            },
+            DirectoryEntry::Directory(child) => {
+                tree_recursor(&child.children, indent + 1);
+            }
+        }
+    }
 }
 
 fn read_zip(zip_path: &Path) -> Result<()> {

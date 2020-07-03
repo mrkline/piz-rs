@@ -29,6 +29,11 @@ pub enum ZipError {
     #[error("Archive prepended with {0} unknown bytes")]
     PrependedWithUnknownBytes(usize),
 
+    /// The ZIP archive contained a nonsensical file hierarchy
+    /// (duplicate entries, bad paths, etc.)
+    #[error("Archive contained strange a strange file hierarchy: {0}")]
+    Hierarchy(String),
+
     /// A cast from a 64-bit int to a usize failed while mapping the file,
     /// probably on a 32-bit system.
     ///

@@ -7,8 +7,10 @@
 //! [Zip crate]: https://crates.io/crates/zip
 
 use std::borrow::Cow;
+use std::collections::BTreeMap;
+use std::ffi::OsStr;
 use std::io;
-use std::path::Path;
+use std::path::{Component, Path};
 
 use flate2::read::DeflateDecoder;
 use log::*;
@@ -273,4 +275,145 @@ fn make_reader<'a, R: io::Read + Send + 'a>(
             "Compression method not supported",
         ))),
     }
+}
+
+pub type DirectoryContents<'a> = BTreeMap<&'a OsStr, DirectoryEntry<'a>>;
+
+#[derive(Debug)]
+pub struct Directory<'a> {
+    pub metadata: &'a FileMetadata<'a>,
+    pub children: DirectoryContents<'a>,
+}
+
+impl<'a> Directory<'a> {
+    fn new(metadata: &'a FileMetadata<'a>) -> Self {
+        Self {
+            metadata,
+            children: DirectoryContents::new(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum DirectoryEntry<'a> {
+    File(&'a FileMetadata<'a>),
+    Directory(Directory<'a>),
+}
+
+impl<'a> DirectoryEntry<'a> {
+    fn metadata(&self) -> &'a FileMetadata<'a> {
+        match &self {
+            DirectoryEntry::File(metadata) => metadata,
+            DirectoryEntry::Directory(dir) => dir.metadata,
+        }
+    }
+
+    fn name(&self) -> &'a OsStr {
+        let path = &self.metadata().file_name;
+        path.file_name().expect("Path ended in ..")
+    }
+}
+
+pub fn treeify<'a>(entries: &'a [FileMetadata<'a>]) -> ZipResult<DirectoryContents<'a>> {
+    let mut contents = DirectoryContents::new();
+
+    for entry in entries {
+        entree_entry(entry, &mut contents)?;
+    }
+
+    Ok(contents)
+}
+
+fn entree_entry<'a>(
+    entry: &'a FileMetadata<'a>,
+    tree: &mut DirectoryContents<'a>,
+) -> ZipResult<()> {
+    let path = &entry.file_name;
+
+    let parent_dir = if let Some(parent) = path.parent() {
+        walk_tree(parent, tree)?
+    } else {
+        tree
+    };
+
+    // Check: Path doesn't end in something weird.
+    let _base = path
+        .file_name()
+        .ok_or_else(|| ZipError::Hierarchy(format!("Path {} ended in ..", path.display())))?;
+
+    let to_insert: DirectoryEntry = if entry.is_dir() {
+        DirectoryEntry::Directory(Directory::new(entry))
+    } else {
+        DirectoryEntry::File(entry)
+    };
+
+    if parent_dir.insert(to_insert.name(), to_insert).is_some() {
+        return Err(ZipError::Hierarchy(format!(
+            "Duplicate entry for {}",
+            path.display()
+        )));
+    }
+
+    Ok(())
+}
+
+fn walk_tree<'a, 'b>(
+    path: &Path,
+    tree: &'b mut DirectoryContents<'a>,
+) -> ZipResult<&'b mut DirectoryContents<'a>> {
+    let mut current = tree;
+
+    for component in path.components() {
+        match component {
+            Component::Prefix(prefix) => {
+                let prefix = prefix.as_os_str();
+                return Err(ZipError::Hierarchy(format!(
+                    "Prefix {} found in path {}",
+                    prefix.to_string_lossy(),
+                    path.display()
+                )));
+            }
+            Component::RootDir => {
+                warn!("Root directory found in path {}", path.display());
+                // Huh. Keep going.
+            }
+            Component::CurDir => {
+                warn!("Current dir (.) found in path {}", path.display());
+                // Huh. Keep going.
+            }
+            Component::ParentDir => {
+                // We could canonicalize it somewhere down the road.
+                // Path::canonicalize() doesn't work because it tries
+                // to actually resolve the path
+                // (and failing if something doesn't exist there).
+                // Maybe try https://crates.io/crates/path-clean some time?
+                return Err(ZipError::Hierarchy(format!(
+                    "Parent dir (..) found in path {}",
+                    path.display()
+                )));
+            }
+
+            Component::Normal(component) => {
+                if let Some(child) = current.get_mut(component) {
+                    match child {
+                        DirectoryEntry::Directory(dir) => {
+                            current = &mut dir.children;
+                        }
+                        _ => {
+                            return Err(ZipError::Hierarchy(format!(
+                                "{} is a file, expected a directory",
+                                path.display()
+                            )));
+                        }
+                    }
+                } else {
+                    return Err(ZipError::Hierarchy(format!(
+                        "{} found before parent directories",
+                        path.display()
+                    )));
+                }
+            }
+        }
+    }
+    Ok(current)
 }
