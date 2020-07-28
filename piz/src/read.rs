@@ -12,6 +12,7 @@ use std::ffi::OsStr;
 use std::io;
 use std::path::{Component, Path};
 
+use chrono::NaiveDateTime;
 use flate2::read::DeflateDecoder;
 use log::*;
 
@@ -51,6 +52,8 @@ pub struct FileMetadata<'a> {
     pub encrypted: bool,
     /// The provided path of the file.
     pub file_name: Cow<'a, Path>,
+    /// The ISO 8601 combined date and time the file was last modified
+    pub last_modified: NaiveDateTime,
     /// The offset to the local file header in the archive
     pub(crate) header_offset: usize,
     // TODO: Add other fields the user might want to know about:
