@@ -495,8 +495,8 @@ impl<'a> FileMetadata<'a> {
             compression_method,
             crc32: cde.crc32,
             encrypted,
-            header_offset: usize(cde.header_offset)?,
             file_name,
+            header_offset: usize(cde.header_offset)?,
         };
 
         parse_extra_field(&mut metadata, cde.extra_field)?;
@@ -537,8 +537,8 @@ impl<'a> FileMetadata<'a> {
             compression_method,
             crc32: local.crc32,
             encrypted,
-            header_offset,
             file_name,
+            header_offset,
         };
 
         parse_extra_field(&mut metadata, local.extra_field)?;
