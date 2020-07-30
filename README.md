@@ -1,5 +1,7 @@
 # piz: A Parallel Implementation of Zip (in Rust)
 
+![CI status](https://github.com/mrkline/piz-rs/workflows/CI/badge.svg)
+
 piz is a Zip archive reader designed to decompress any number of files
 concurrently using a simple API:
 ```rust
