@@ -72,7 +72,7 @@ fn tree_recursor(contents: &DirectoryContents, indent: usize) {
         match value {
             DirectoryEntry::File(_f) => {
                 // println!("{}{:?}", indentation, f);
-            },
+            }
             DirectoryEntry::Directory(child) => {
                 tree_recursor(&child.children, indent + 1);
             }
