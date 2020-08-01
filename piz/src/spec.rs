@@ -17,6 +17,7 @@ use std::borrow::Cow;
 use std::convert::TryInto;
 use std::path::Path;
 
+use chrono::{NaiveDate, NaiveDateTime};
 use codepage_437::*;
 use twoway::{find_bytes, rfind_bytes};
 
@@ -495,8 +496,9 @@ impl<'a> FileMetadata<'a> {
             compression_method,
             crc32: cde.crc32,
             encrypted,
-            header_offset: usize(cde.header_offset)?,
             file_name,
+            last_modified: parse_msdos(cde.last_modified_time, cde.last_modified_date),
+            header_offset: usize(cde.header_offset)?,
         };
 
         parse_extra_field(&mut metadata, cde.extra_field)?;
@@ -537,14 +539,28 @@ impl<'a> FileMetadata<'a> {
             compression_method,
             crc32: local.crc32,
             encrypted,
-            header_offset,
             file_name,
+            last_modified: parse_msdos(local.last_modified_time, local.last_modified_date),
+            header_offset,
         };
 
         parse_extra_field(&mut metadata, local.extra_field)?;
 
         Ok(metadata)
     }
+}
+
+fn parse_msdos(time: u16, date: u16) -> NaiveDateTime {
+    let seconds = (0b0000_0000_0001_1111 & time) as u32 * 2; // MSDOS uses 2-second precision
+    let minutes = (0b0000_0111_1110_0000 & time) as u32 >> 5;
+    let hours = (0b1111_1000_0000_0000 & time) as u32 >> 11;
+
+    let days = (0b0000_0000_0001_1111 & date) as u32;
+    let months = (0b0000_0001_1110_0000 & date) as u32 >> 5;
+    // MSDOS uses years since 1980; Always interpreted as a positive value
+    let years = ((0b1111_1110_0000_0000 & date) >> 9) as i32 + 1980;
+
+    NaiveDate::from_ymd(years, months, days).and_hms(hours, minutes, seconds)
 }
 
 /// Parses the "extra fields" found in central directory entries
