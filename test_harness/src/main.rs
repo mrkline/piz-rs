@@ -10,6 +10,7 @@ use rayon::prelude::*;
 use structopt::*;
 
 use piz::read::*;
+use piz::result::ZipError;
 
 /// PIZ (Parallel Implementation of Zip) smoke tests
 ///
@@ -33,29 +34,26 @@ fn main() -> Result<()> {
     errlog.verbosity(args.verbosity + 1);
     errlog.init()?;
 
-    let inputs: Vec<&Path> = [
+    let inputs = [
         "inputs/hello.zip",
         "inputs/hello-prefixed.zip",
         "inputs/zip64.zip",
-    ]
-    .iter()
-    .map(|p| Path::new(p))
-    .collect();
+    ];
 
-    if inputs.iter().any(|i| !i.exists()) {
+    if inputs.iter().any(|i| !Path::new(i).exists()) {
         Command::new("./create-inputs.sh")
             .status()
             .expect("Couldn't set up input files");
     }
 
-    for input in inputs {
+    for input in &inputs {
         read_zip(input)?;
     }
 
     Ok(())
 }
 
-fn read_zip(zip_path: &Path) -> Result<()> {
+fn read_zip(zip_path: &str) -> Result<()> {
     info!("Memory mapping {:#?}", zip_path);
     let zip_file = File::open(zip_path).context("Couldn't open zip file")?;
     let mapping = unsafe { Mmap::map(&zip_file).context("Couldn't mmap zip file")? };
@@ -65,7 +63,45 @@ fn read_zip(zip_path: &Path) -> Result<()> {
         .0;
 
     // Make sure we can treeify the entries (i.e., they form a valid directory)
-    let _tree = treeify(archive.entries())?;
+    let tree = treeify(archive.entries())?;
+
+    match zip_path {
+        "inputs/hello.zip" | "inputs/hello-prefixed.zip" => {
+            metadata_from_path(Path::new("hello/hi.txt"), &tree)?;
+            metadata_from_path(Path::new("hello/rip.txt"), &tree)?;
+            metadata_from_path(Path::new("hello/sr71.txt"), &tree)?;
+
+            let no_such_file = Path::new("no/such/file");
+            match metadata_from_path(no_such_file, &tree) {
+                Err(ZipError::NoSuchFile(p)) => {
+                    assert_eq!(no_such_file, p);
+                }
+                Err(other) => panic!("Got incorrect error from path with no file: {:?}", other),
+                Ok(_) => panic!("Got a file back from a path with no file"),
+            };
+            let no_such_file = Path::new("top-level-no-such-file");
+            match metadata_from_path(no_such_file, &tree) {
+                Err(ZipError::NoSuchFile(p)) => {
+                    assert_eq!(no_such_file, p);
+                }
+                Err(other) => panic!("Got incorrect error from path with no file: {:?}", other),
+                Ok(_) => panic!("Got a file back from a path with no file"),
+            };
+
+            let invalid_path = Path::new("../nope");
+            match metadata_from_path(invalid_path, &tree) {
+                Err(ZipError::InvalidPath(_)) => { /* Cool. */ }
+                Err(other) => panic!("Got incorrect error from invalid path: {:?}", other),
+                Ok(_) => panic!("Got a file back from invalid path"),
+            };
+        }
+        "inputs/zip64.zip" => {
+            metadata_from_path(Path::new("zip64/zero100"), &tree)?;
+            metadata_from_path(Path::new("zip64/zero4400"), &tree)?;
+            metadata_from_path(Path::new("zip64/zero5000"), &tree)?;
+        }
+        wut => unreachable!(wut),
+    };
 
     // Try reading out each file in the archive.
     // (When the reader gets dropped, the file's CRC32 will be checked

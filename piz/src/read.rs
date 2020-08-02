@@ -223,8 +223,9 @@ impl<'a> ZipArchive<'a> {
     /// Returns the entries found in the ZIP archive's central directory.
     ///
     /// No effort is made to deduplicate or otherwise validate these entries.
-    /// Future releases might provide helper functions that builds a tree of
-    /// these entries.
+    /// To do that, call [`treeify()`]
+    ///
+    /// [`treeify()`]: fn.treeify.html
     pub fn entries(&self) -> &[FileMetadata] {
         &self.entries
     }
@@ -282,6 +283,7 @@ fn make_reader<'a, R: io::Read + Send + 'a>(
 
 pub type DirectoryContents<'a> = BTreeMap<&'a OsStr, DirectoryEntry<'a>>;
 
+/// A directory in a ZipArchive, including its metadata and its contents.
 #[derive(Debug)]
 pub struct Directory<'a> {
     pub metadata: &'a FileMetadata<'a>,
@@ -317,6 +319,18 @@ impl<'a> DirectoryEntry<'a> {
     }
 }
 
+/// Given the metadata from [`ZipArchive::entries()`],
+/// organize them into a tree of nested directories and files.
+///
+/// This does two things:
+///
+/// 1. It makes files easier to look up by path (see [`metadata_from_path()`]).
+///
+/// 2. It validates the archive, making sure each `FileMetadata` has a valid path,
+///    no duplicates, etc. (The ZIP file format makes no promises here.)
+///
+/// [`ZipArchive::entries()`]: struct.ZipArchive.html#method.entries
+/// [`metadata_from_path()`]: fn.metadata_from_path.html
 pub fn treeify<'a>(entries: &'a [FileMetadata<'a>]) -> ZipResult<DirectoryContents<'a>> {
     let mut contents = DirectoryContents::new();
 
@@ -327,6 +341,7 @@ pub fn treeify<'a>(entries: &'a [FileMetadata<'a>]) -> ZipResult<DirectoryConten
     Ok(contents)
 }
 
+/// Places the given entry in the given directory tree.
 fn entree_entry<'a>(
     entry: &'a FileMetadata<'a>,
     tree: &mut DirectoryContents<'a>,
@@ -334,7 +349,7 @@ fn entree_entry<'a>(
     let path = &entry.file_name;
 
     let parent_dir = if let Some(parent) = path.parent() {
-        walk_tree(parent, tree)?
+        walk_parent_directories_mut(parent, tree)?
     } else {
         tree
     };
@@ -360,7 +375,7 @@ fn entree_entry<'a>(
     Ok(())
 }
 
-fn walk_tree<'a, 'b>(
+fn walk_parent_directories_mut<'a, 'b>(
     path: &Path,
     tree: &'b mut DirectoryContents<'a>,
 ) -> ZipResult<&'b mut DirectoryContents<'a>> {
@@ -414,6 +429,91 @@ fn walk_tree<'a, 'b>(
                         "{} found before parent directories",
                         path.display()
                     )));
+                }
+            }
+        }
+    }
+    Ok(current)
+}
+
+/// Looks up a path in the file tree provided by [`treeify()`]
+///
+/// [`treeify()`]: fn.treeify.html
+pub fn metadata_from_path<'a>(
+    path: &Path,
+    tree: &DirectoryContents<'a>,
+) -> ZipResult<&'a FileMetadata<'a>> {
+    let parent_dir = if let Some(parent) = path.parent() {
+        match walk_parent_directories(parent, tree) {
+            Err(ZipError::NoSuchFile(_)) => Err(ZipError::NoSuchFile(path.to_owned())),
+            other_result => other_result,
+        }?
+    } else {
+        tree
+    };
+
+    let base = path
+        .file_name()
+        .ok_or_else(|| ZipError::InvalidPath(format!("Path {} ended in ..", path.display())))?;
+
+    parent_dir
+        .get(base)
+        .ok_or_else(|| ZipError::NoSuchFile(path.to_owned()))
+        .map(|dir_entry| dir_entry.metadata())
+}
+
+fn walk_parent_directories<'a, 'b>(
+    path: &Path,
+    tree: &'b DirectoryContents<'a>,
+) -> ZipResult<&'b DirectoryContents<'a>> {
+    let mut current = tree;
+
+    for component in path.components() {
+        // The path is coming from the user, not the ZIP archive.
+        // So, unlike walk_parent_directories_mut(), revolt over weird stuff.
+        match component {
+            Component::Prefix(prefix) => {
+                let prefix = prefix.as_os_str();
+                return Err(ZipError::InvalidPath(format!(
+                    "Prefix {} found in path {}",
+                    prefix.to_string_lossy(),
+                    path.display()
+                )));
+            }
+            Component::RootDir => {
+                return Err(ZipError::InvalidPath(format!(
+                    "Root directory found in path {}",
+                    path.display()
+                )));
+            }
+            Component::CurDir => {
+                return Err(ZipError::InvalidPath(format!(
+                    "Current dir (.) found in path {}",
+                    path.display()
+                )));
+            }
+            Component::ParentDir => {
+                return Err(ZipError::InvalidPath(format!(
+                    "Parent dir (..) found in path {}",
+                    path.display()
+                )));
+            }
+
+            Component::Normal(component) => {
+                if let Some(child) = current.get(component) {
+                    match child {
+                        DirectoryEntry::Directory(dir) => {
+                            current = &dir.children;
+                        }
+                        _ => {
+                            return Err(ZipError::InvalidPath(format!(
+                                "{} is a file, expected a directory",
+                                path.display()
+                            )));
+                        }
+                    }
+                } else {
+                    return Err(ZipError::NoSuchFile(path.to_owned()));
                 }
             }
         }

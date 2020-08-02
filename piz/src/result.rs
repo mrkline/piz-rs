@@ -1,5 +1,7 @@
 //! Error types and the related `Result<T>`
 
+use std::path::PathBuf;
+
 use thiserror::Error;
 
 pub type ZipResult<T> = Result<T, ZipError>;
@@ -33,6 +35,14 @@ pub enum ZipError {
     /// (duplicate entries, bad paths, etc.)
     #[error("Archive contained strange a strange file hierarchy: {0}")]
     Hierarchy(String),
+
+    /// A file wasn't found at the provied path
+    #[error("No file in the archive with the path {0}")]
+    NoSuchFile(PathBuf),
+
+    /// A user-provided path (not one from a ZIP archive) was invalid.
+    #[error("Invalid path")]
+    InvalidPath(String),
 
     /// A cast from a 64-bit int to a usize failed while mapping the file,
     /// probably on a 32-bit system.
