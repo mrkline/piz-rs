@@ -64,8 +64,12 @@ fn read_zip(zip_path: &Path) -> Result<()> {
         .context("Couldn't load archive")?
         .0;
 
+    // Make sure we can treeify the entries (i.e., they form a valid directory)
     let _tree = treeify(archive.entries())?;
 
+    // Try reading out each file in the archive.
+    // (When the reader gets dropped, the file's CRC32 will be checked
+    // against the one stored in the archive.)
     archive
         .entries()
         .into_par_iter()
