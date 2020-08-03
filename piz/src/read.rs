@@ -439,10 +439,11 @@ fn walk_parent_directories_mut<'a, 'b>(
 /// Looks up a path in the file tree provided by [`treeify()`]
 ///
 /// [`treeify()`]: fn.treeify.html
-pub fn metadata_from_path<'a>(
-    path: &Path,
+pub fn metadata_from_path<'a, P: AsRef<Path>>(
+    path: P,
     tree: &DirectoryContents<'a>,
 ) -> ZipResult<&'a FileMetadata<'a>> {
+    let path = path.as_ref();
     let parent_dir = if let Some(parent) = path.parent() {
         match walk_parent_directories(parent, tree) {
             Err(ZipError::NoSuchFile(_)) => Err(ZipError::NoSuchFile(path.to_owned())),

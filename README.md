@@ -33,7 +33,7 @@ archive.entries().into_par_iter().try_for_each(|entry| {
 // - Validates the archive, making sure each `FileMetadata` has a valid path,
 //   no duplicates, etc.
 let tree = treeify(archive.entries())?;
-let metadata = metadata_from_path(Path::new("some/specific/file"), &tree)?;
+let metadata = metadata_from_path("some/specific/file", &tree)?;
 ```
 
 Zip is an interesting archive format: unlike compressed tarballs often seen

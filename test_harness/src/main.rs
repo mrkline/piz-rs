@@ -67,9 +67,9 @@ fn read_zip(zip_path: &str) -> Result<()> {
 
     match zip_path {
         "inputs/hello.zip" | "inputs/hello-prefixed.zip" => {
-            metadata_from_path(Path::new("hello/hi.txt"), &tree)?;
-            metadata_from_path(Path::new("hello/rip.txt"), &tree)?;
-            metadata_from_path(Path::new("hello/sr71.txt"), &tree)?;
+            metadata_from_path("hello/hi.txt", &tree)?;
+            metadata_from_path("hello/rip.txt", &tree)?;
+            metadata_from_path("hello/sr71.txt", &tree)?;
 
             let no_such_file = Path::new("no/such/file");
             match metadata_from_path(no_such_file, &tree) {
@@ -96,9 +96,9 @@ fn read_zip(zip_path: &str) -> Result<()> {
             };
         }
         "inputs/zip64.zip" => {
-            metadata_from_path(Path::new("zip64/zero100"), &tree)?;
-            metadata_from_path(Path::new("zip64/zero4400"), &tree)?;
-            metadata_from_path(Path::new("zip64/zero5000"), &tree)?;
+            metadata_from_path("zip64/zero100", &tree)?;
+            metadata_from_path("zip64/zero4400", &tree)?;
+            metadata_from_path("zip64/zero5000", &tree)?;
         }
         wut => unreachable!(wut),
     };
