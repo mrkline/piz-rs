@@ -26,6 +26,14 @@ archive.entries().into_par_iter().try_for_each(|entry| {
 //         let mut reader = archive.read(entry)?;
 //         // Read away!
 //     }
+
+// If you want to look up entries by name,
+// arrange them in a tree of directories and files, which:
+// - Simplifies lookup
+// - Validates the archive, making sure each `FileMetadata` has a valid path,
+//   no duplicates, etc.
+let tree = treeify(archive.entries())?;
+let metadata = metadata_from_path(Path::new("some/specific/file"), &tree)?;
 ```
 
 Zip is an interesting archive format: unlike compressed tarballs often seen
