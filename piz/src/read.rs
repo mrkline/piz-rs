@@ -306,7 +306,8 @@ pub enum DirectoryEntry<'a> {
 }
 
 impl<'a> DirectoryEntry<'a> {
-    fn metadata(&self) -> &'a FileMetadata<'a> {
+    /// Returns the metadata of the entry.
+    pub fn metadata(&self) -> &'a FileMetadata<'a> {
         match &self {
             DirectoryEntry::File(metadata) => metadata,
             DirectoryEntry::Directory(dir) => dir.metadata,
