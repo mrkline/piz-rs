@@ -56,28 +56,10 @@ fn print_tree(zip_path: &Path) -> Result<()> {
         .context("Couldn't load archive")?
         .0;
     let tree = treeify(archive.entries())?;
-    tree_recursor(&tree, 0);
-    Ok(())
-}
-
-fn tree_recursor(contents: &DirectoryContents, indent: usize) {
-    for (name, value) in contents {
-        /* With pipes:
-        let mut indentation = std::iter::repeat("| ").take(indent).collect::<String>();
-        indentation.pop();
-        println!("{}-{:?}", indentation, name);
-        */
-        let indentation = std::iter::repeat(' ').take(indent * 2).collect::<String>();
-        println!("{}{:?}", indentation, name);
-        match value {
-            DirectoryEntry::File(_f) => {
-                // println!("{}{:?}", indentation, f);
-            }
-            DirectoryEntry::Directory(child) => {
-                tree_recursor(&child.children, indent + 1);
-            }
-        }
+    for metadata in FileTreeIterator::new(&tree) {
+        println!("{}", metadata.file_name.display());
     }
+    Ok(())
 }
 
 fn read_zip(zip_path: &Path) -> Result<()> {

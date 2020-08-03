@@ -106,8 +106,8 @@ fn read_zip(zip_path: &str) -> Result<()> {
     // Try reading out each file in the archive.
     // (When the reader gets dropped, the file's CRC32 will be checked
     // against the one stored in the archive.)
-    archive
-        .entries()
+    FileTreeIterator::new(&tree)
+        .collect::<Vec<_>>()
         .into_par_iter()
         .try_for_each::<_, Result<()>>(|entry| {
             let mut reader = archive.read(entry)?;

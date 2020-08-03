@@ -7,7 +7,7 @@
 //! [Zip crate]: https://crates.io/crates/zip
 
 use std::borrow::Cow;
-use std::collections::BTreeMap;
+use std::collections::{btree_map, BTreeMap};
 use std::ffi::OsStr;
 use std::io;
 use std::path::{Component, Path};
@@ -521,4 +521,38 @@ fn walk_parent_directories<'a, 'b>(
         }
     }
     Ok(current)
+}
+
+pub struct FileTreeIterator<'a, 'b> {
+    stack: Vec<btree_map::Values<'b, &'a OsStr, DirectoryEntry<'a>>>,
+}
+
+impl<'a, 'b> FileTreeIterator<'a, 'b> {
+    pub fn new(tree: &'b DirectoryContents<'a>) -> Self {
+        let stack = vec![tree.values()];
+        Self { stack }
+    }
+}
+
+impl<'a> Iterator for FileTreeIterator<'a, '_> {
+    type Item = &'a FileMetadata<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.stack.is_empty() {
+            return None;
+        }
+        let next = self.stack.last_mut().unwrap().next();
+        match next {
+            Some(DirectoryEntry::File(f)) => {
+                return Some(f);
+            }
+            Some(DirectoryEntry::Directory(d)) => {
+                self.stack.push(d.children.values());
+            }
+            None => {
+                self.stack.pop();
+            }
+        };
+        self.next() // RECURSION
+    }
 }
