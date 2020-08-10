@@ -223,9 +223,9 @@ impl<'a> ZipArchive<'a> {
     /// Returns the entries found in the ZIP archive's central directory.
     ///
     /// No effort is made to deduplicate or otherwise validate these entries.
-    /// To do that, call [`treeify()`]
+    /// To do that, create a [`FileTree`].
     ///
-    /// [`treeify()`]: fn.treeify.html
+    /// [`FileTree`]: struct.FileTree.html
     pub fn entries(&self) -> &[FileMetadata] {
         &self.entries
     }
@@ -320,26 +320,59 @@ impl<'a> DirectoryEntry<'a> {
     }
 }
 
-/// Given the metadata from [`ZipArchive::entries()`],
-/// organize them into a tree of nested directories and files.
-///
-/// This does two things:
-///
-/// 1. It makes files easier to look up by path (see [`metadata_from_path()`]).
-///
-/// 2. It validates the archive, making sure each `FileMetadata` has a valid path,
-///    no duplicates, etc. (The ZIP file format makes no promises here.)
-///
-/// [`ZipArchive::entries()`]: struct.ZipArchive.html#method.entries
-/// [`metadata_from_path()`]: fn.metadata_from_path.html
-pub fn treeify<'a>(entries: &'a [FileMetadata<'a>]) -> ZipResult<DirectoryContents<'a>> {
-    let mut contents = DirectoryContents::new();
+pub struct FileTree<'a> {
+    /// The root directory of the archive
+    pub root: DirectoryContents<'a>,
+}
 
-    for entry in entries {
-        entree_entry(entry, &mut contents)?;
+impl<'a> FileTree<'a> {
+    /// Given the metadata from [`ZipArchive::entries()`],
+    /// organize them into a tree of nested directories and files.
+    ///
+    /// This does two things:
+    ///
+    /// 1. It makes files easier to look up by path
+    ///
+    /// 2. It validates the archive, making sure each `FileMetadata` has a valid path,
+    ///    no duplicates, etc. (The ZIP file format makes no promises here.)
+    ///
+    /// [`ZipArchive::entries()`]: struct.ZipArchive.html#method.entries
+    pub fn new(entries: &'a [FileMetadata<'a>]) -> ZipResult<Self> {
+        let mut contents = DirectoryContents::new();
+
+        for entry in entries {
+            entree_entry(entry, &mut contents)?;
+        }
+
+        Ok(Self { root: contents })
     }
 
-    Ok(contents)
+    /// Looks up a file (or directory) by its path.
+    pub fn from_path<P: AsRef<Path>>(&self, path: P) -> ZipResult<&'a FileMetadata<'a>> {
+        let path = path.as_ref();
+        let parent_dir = if let Some(parent) = path.parent() {
+            match walk_parent_directories(parent, &self.root) {
+                Err(ZipError::NoSuchFile(_)) => Err(ZipError::NoSuchFile(path.to_owned())),
+                other_result => other_result,
+            }?
+        } else {
+            &self.root
+        };
+
+        let base = path
+            .file_name()
+            .ok_or_else(|| ZipError::InvalidPath(format!("Path {} ended in ..", path.display())))?;
+
+        parent_dir
+            .get(base)
+            .ok_or_else(|| ZipError::NoSuchFile(path.to_owned()))
+            .map(|dir_entry| dir_entry.metadata())
+    }
+
+    /// Returns an iterator over the files in the tree
+    pub fn files(&self) -> FileTreeIterator<'a, '_> {
+        FileTreeIterator::new(&self.root)
+    }
 }
 
 /// Places the given entry in the given directory tree.
@@ -376,6 +409,7 @@ fn entree_entry<'a>(
     Ok(())
 }
 
+/// Used by `entree_entry()` to reach the directory where we'll insert a new entry.
 fn walk_parent_directories_mut<'a, 'b>(
     path: &Path,
     tree: &'b mut DirectoryContents<'a>,
@@ -437,33 +471,11 @@ fn walk_parent_directories_mut<'a, 'b>(
     Ok(current)
 }
 
-/// Looks up a path in the file tree provided by [`treeify()`]
+/// Used by `FileTree::from_path()` to walk the tree to the parent directory
+/// where the desired file lives.
 ///
-/// [`treeify()`]: fn.treeify.html
-pub fn metadata_from_path<'a, P: AsRef<Path>>(
-    path: P,
-    tree: &DirectoryContents<'a>,
-) -> ZipResult<&'a FileMetadata<'a>> {
-    let path = path.as_ref();
-    let parent_dir = if let Some(parent) = path.parent() {
-        match walk_parent_directories(parent, tree) {
-            Err(ZipError::NoSuchFile(_)) => Err(ZipError::NoSuchFile(path.to_owned())),
-            other_result => other_result,
-        }?
-    } else {
-        tree
-    };
-
-    let base = path
-        .file_name()
-        .ok_or_else(|| ZipError::InvalidPath(format!("Path {} ended in ..", path.display())))?;
-
-    parent_dir
-        .get(base)
-        .ok_or_else(|| ZipError::NoSuchFile(path.to_owned()))
-        .map(|dir_entry| dir_entry.metadata())
-}
-
+/// Consequently, this assumes that `path` is provided by the user,
+/// and emits errors accordingly.
 fn walk_parent_directories<'a, 'b>(
     path: &Path,
     tree: &'b DirectoryContents<'a>,
@@ -528,7 +540,7 @@ pub struct FileTreeIterator<'a, 'b> {
 }
 
 impl<'a, 'b> FileTreeIterator<'a, 'b> {
-    pub fn new(tree: &'b DirectoryContents<'a>) -> Self {
+    fn new(tree: &'b DirectoryContents<'a>) -> Self {
         let stack = vec![tree.values()];
         Self { stack }
     }
@@ -553,6 +565,15 @@ impl<'a> Iterator for FileTreeIterator<'a, '_> {
                 self.stack.pop();
             }
         };
-        self.next() // RECURSION
+        self.next()
+    }
+}
+
+impl<'a, 'b> IntoIterator for &'b FileTree<'a> {
+    type Item = &'a FileMetadata<'a>;
+    type IntoIter = FileTreeIterator<'a, 'b>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.files()
     }
 }

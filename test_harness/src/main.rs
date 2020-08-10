@@ -63,16 +63,16 @@ fn read_zip(zip_path: &str) -> Result<()> {
         .0;
 
     // Make sure we can treeify the entries (i.e., they form a valid directory)
-    let tree = treeify(archive.entries())?;
+    let tree = FileTree::new(archive.entries())?;
 
     match zip_path {
         "inputs/hello.zip" | "inputs/hello-prefixed.zip" => {
-            metadata_from_path("hello/hi.txt", &tree)?;
-            metadata_from_path("hello/rip.txt", &tree)?;
-            metadata_from_path("hello/sr71.txt", &tree)?;
+            tree.from_path("hello/hi.txt")?;
+            tree.from_path("hello/rip.txt")?;
+            tree.from_path("hello/sr71.txt")?;
 
             let no_such_file = Path::new("no/such/file");
-            match metadata_from_path(no_such_file, &tree) {
+            match tree.from_path(no_such_file) {
                 Err(ZipError::NoSuchFile(p)) => {
                     assert_eq!(no_such_file, p);
                 }
@@ -80,7 +80,7 @@ fn read_zip(zip_path: &str) -> Result<()> {
                 Ok(_) => panic!("Got a file back from a path with no file"),
             };
             let no_such_file = Path::new("top-level-no-such-file");
-            match metadata_from_path(no_such_file, &tree) {
+            match tree.from_path(no_such_file) {
                 Err(ZipError::NoSuchFile(p)) => {
                     assert_eq!(no_such_file, p);
                 }
@@ -89,16 +89,16 @@ fn read_zip(zip_path: &str) -> Result<()> {
             };
 
             let invalid_path = Path::new("../nope");
-            match metadata_from_path(invalid_path, &tree) {
+            match tree.from_path(invalid_path) {
                 Err(ZipError::InvalidPath(_)) => { /* Cool. */ }
                 Err(other) => panic!("Got incorrect error from invalid path: {:?}", other),
                 Ok(_) => panic!("Got a file back from invalid path"),
             };
         }
         "inputs/zip64.zip" => {
-            metadata_from_path("zip64/zero100", &tree)?;
-            metadata_from_path("zip64/zero4400", &tree)?;
-            metadata_from_path("zip64/zero5000", &tree)?;
+            tree.from_path("zip64/zero100")?;
+            tree.from_path("zip64/zero4400")?;
+            tree.from_path("zip64/zero5000")?;
         }
         wut => unreachable!(wut),
     };
@@ -106,7 +106,7 @@ fn read_zip(zip_path: &str) -> Result<()> {
     // Try reading out each file in the archive.
     // (When the reader gets dropped, the file's CRC32 will be checked
     // against the one stored in the archive.)
-    FileTreeIterator::new(&tree)
+    tree.files()
         .collect::<Vec<_>>()
         .into_par_iter()
         .try_for_each::<_, Result<()>>(|entry| {

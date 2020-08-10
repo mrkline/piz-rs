@@ -55,8 +55,8 @@ fn print_tree(zip_path: &Path) -> Result<()> {
     let archive = ZipArchive::with_prepended_data(&mapping)
         .context("Couldn't load archive")?
         .0;
-    let tree = treeify(archive.entries())?;
-    for metadata in FileTreeIterator::new(&tree) {
+    let tree = FileTree::new(archive.entries())?;
+    for metadata in tree.files() {
         println!("{}", metadata.file_name.display());
     }
     Ok(())

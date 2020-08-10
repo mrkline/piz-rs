@@ -15,25 +15,29 @@ let zip_file = File::open("foo.zip")?;
 let mapping = unsafe { Mmap::map(&zip_file)? };
 let archive = ZipArchive::new(&mapping)?;
 
-// Look, ma, reading files in parallel! Using Rayon:
-archive.entries().into_par_iter().try_for_each(|entry| {
-    let mut reader = archive.read(entry)?;
-    // reader implements Read, so read away!
-});
-
-// If you don't care about parallelism, a simple loop will do:
+// We can iterate through the entries in the archive directly...
+//
 //     for entry in archive.entries() {
 //         let mut reader = archive.read(entry)?;
 //         // Read away!
 //     }
+//
+// ...but ZIP doesn't guarantee that entries are in any particular order,
+// that there aren't duplicates, that an entry's has a valid file path, etc.
+// Let's arrange them into a tree of directories and files, which performs
+// some validation and makes files easier to look up.
+let tree = FileTree::new(archive.entries())?;
 
-// If you want to look up entries by name,
-// arrange them in a tree of directories and files, which:
-// - Simplifies lookup
-// - Validates the archive, making sure each `FileMetadata` has a valid path,
-//   no duplicates, etc.
-let tree = treeify(archive.entries())?;
-let metadata = metadata_from_path("some/specific/file", &tree)?;
+// With that done, we can get a file (or directory)'s metadata from its path.
+let metadata = tree.from_path("some/specific/file", &tree)?;
+// And read it out, if we'd like:
+let mut reader = archive.read(metadata)?;
+let mut save_to = File::create(&metadata.file_name)?;
+io::copy(&mut reader, &mut sink)?;
+
+// Readers are `Send`, so we can read out as many as we'd like.
+// Here we'll use Rayon to read out the whole archive:
+// TODO
 ```
 
 Zip is an interesting archive format: unlike compressed tarballs often seen
