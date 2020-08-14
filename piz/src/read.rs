@@ -281,6 +281,7 @@ fn make_reader<'a, R: io::Read + Send + 'a>(
     }
 }
 
+/// Maps a directory's child paths to the respective entries.
 pub type DirectoryContents<'a> = BTreeMap<&'a OsStr, DirectoryEntry<'a>>;
 
 /// A directory in a ZipArchive, including its metadata and its contents.
@@ -369,13 +370,19 @@ impl<'a> FileTree<'a> {
             .map(|dir_entry| dir_entry.metadata())
     }
 
+    /// Returns an iterator over the entries in the tree, sorted by path.
     pub fn iter(&self) -> TreeIterator<'a, '_> {
         TreeIterator::new(&self.root)
     }
 
-    /// Returns an iterator over the files in the tree
+    /// Returns an iterator over the files in the tree, sorted by path.
     pub fn files(&self) -> FileTreeIterator<'a, '_> {
         FileTreeIterator::new(&self.root)
+    }
+
+    /// Returns an iterator over the directories in the tree, sorted by path.
+    pub fn directories(&self) -> DirectoryTreeIterator<'a, '_> {
+        DirectoryTreeIterator::new(&self.root)
     }
 }
 
@@ -539,6 +546,9 @@ fn walk_parent_directories<'a, 'b>(
     Ok(current)
 }
 
+/// Iterates over all files and directories in a [`FileTree`]
+///
+/// [`FileTree`]: struct.FileTree.html
 pub struct TreeIterator<'a, 'b> {
     stack: Vec<btree_map::Values<'b, &'a OsStr, DirectoryEntry<'a>>>,
 }
@@ -582,14 +592,18 @@ impl<'a, 'b> IntoIterator for &'b FileTree<'a> {
     }
 }
 
+/// Iterates over all files in a [`FileTree`]
+///
+/// [`FileTree`]: struct.FileTree.html
 pub struct FileTreeIterator<'a, 'b> {
-    stack: Vec<btree_map::Values<'b, &'a OsStr, DirectoryEntry<'a>>>,
+    inner: TreeIterator<'a, 'b>,
 }
 
 impl<'a, 'b> FileTreeIterator<'a, 'b> {
     fn new(tree: &'b DirectoryContents<'a>) -> Self {
-        let stack = vec![tree.values()];
-        Self { stack }
+        Self {
+            inner: TreeIterator::new(tree),
+        }
     }
 }
 
@@ -597,19 +611,56 @@ impl<'a> Iterator for FileTreeIterator<'a, '_> {
     type Item = &'a FileMetadata<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.stack.is_empty() {
+        if self.inner.stack.is_empty() {
             return None;
         }
-        let next = self.stack.last_mut().unwrap().next();
+        let next = self.inner.stack.last_mut().unwrap().next();
         match next {
             Some(DirectoryEntry::File(f)) => {
                 return Some(f);
             }
             Some(DirectoryEntry::Directory(d)) => {
-                self.stack.push(d.children.values());
+                self.inner.stack.push(d.children.values());
             }
             None => {
-                self.stack.pop();
+                self.inner.stack.pop();
+            }
+        };
+        self.next()
+    }
+}
+
+/// Iterates over all directories in a [`FileTree`]
+///
+/// [`FileTree`]: struct.FileTree.html
+pub struct DirectoryTreeIterator<'a, 'b> {
+    inner: TreeIterator<'a, 'b>,
+}
+
+impl<'a, 'b> DirectoryTreeIterator<'a, 'b> {
+    fn new(tree: &'b DirectoryContents<'a>) -> Self {
+        Self {
+            inner: TreeIterator::new(tree),
+        }
+    }
+}
+
+impl<'a, 'b> Iterator for DirectoryTreeIterator<'a, 'b> {
+    type Item = &'b Directory<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.inner.stack.is_empty() {
+            return None;
+        }
+        let next = self.inner.stack.last_mut().unwrap().next();
+        match next {
+            Some(DirectoryEntry::Directory(d)) => {
+                self.inner.stack.push(d.children.values());
+                return Some(&d);
+            }
+            Some(DirectoryEntry::File(_f)) => {}
+            None => {
+                self.inner.stack.pop();
             }
         };
         self.next()
