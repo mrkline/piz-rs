@@ -32,9 +32,21 @@
 //! let mut save_to = File::create(&metadata.file_name)?;
 //! io::copy(&mut reader, &mut sink)?;
 //!
-//! // Readers are `Send`, so we can read out as many as we'd like.
+//! // Readers are `Send`, so we can read out as many as we'd like in parallel.
 //! // Here we'll use Rayon to read out the whole archive:
-//! // TODO
+//! tree.files()
+//!     .collect::<Vec<_>>()
+//!     .into_par_iter()
+//!     .try_for_each(|entry| {
+//!         if let Some(parent) = entry.file_name.parent() {
+//!             // Create parent directories as needed.
+//!             fs::create_dir_all(parent)?;
+//!         }
+//!         let mut reader = archive.read(entry)?;
+//!         let mut sink = File::create(&entry.file_name)?;
+//!         io::copy(&mut reader, &mut sink)?;
+//!         Ok(())
+//!     })?;
 //! ```
 //!
 //! Zip is an interesting archive format: unlike compressed tarballs often seen

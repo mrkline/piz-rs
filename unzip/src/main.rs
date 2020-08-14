@@ -1,10 +1,11 @@
 use std::fs::{self, File};
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::*;
 use log::*;
 use memmap::Mmap;
+use rayon::prelude::*;
 use structopt::*;
 
 use piz::read::*;
@@ -40,47 +41,42 @@ fn main() -> Result<()> {
             .with_context(|| format!("Couldn't set working directory to {}", chto.display()))?;
     }
 
-    if args.dry_run {
-        print_tree(&args.zip_path)
-    } else {
-        read_zip(&args.zip_path)
-    }
-}
-
-fn print_tree(zip_path: &Path) -> Result<()> {
-    info!("Memory mapping {:#?}", zip_path);
-    let zip_file = File::open(zip_path).context("Couldn't open zip file")?;
+    info!("Memory mapping {:#?}", &args.zip_path);
+    let zip_file = File::open(&args.zip_path).context("Couldn't open zip file")?;
     let mapping = unsafe { Mmap::map(&zip_file).context("Couldn't mmap zip file")? };
 
     let archive = ZipArchive::with_prepended_data(&mapping)
         .context("Couldn't load archive")?
         .0;
     let tree = FileTree::new(archive.entries())?;
-    for metadata in tree.files() {
-        println!("{}", metadata.file_name.display());
+
+    if args.dry_run {
+        print_tree(&tree)
+    } else {
+        read_zip(&tree, &archive)
+    }
+}
+
+fn print_tree(tree: &FileTree) -> Result<()> {
+    for entry in tree.files() {
+        println!("{}", entry.file_name.display());
     }
     Ok(())
 }
 
-fn read_zip(zip_path: &Path) -> Result<()> {
-    info!("Memory mapping {:#?}", zip_path);
-    let zip_file = File::open(zip_path).context("Couldn't open zip file")?;
-    let mapping = unsafe { Mmap::map(&zip_file).context("Couldn't mmap zip file")? };
-
-    let archive = ZipArchive::with_prepended_data(&mapping)
-        .context("Couldn't load archive")?
-        .0;
-    for entry in archive.entries() {
-        if entry.is_dir() {
-            fs::create_dir_all(&entry.file_name).with_context(|| {
-                format!("Couldn't create directory {}", entry.file_name.display())
-            })?;
-        } else {
+fn read_zip(tree: &FileTree, archive: &ZipArchive) -> Result<()> {
+    tree.files()
+        .collect::<Vec<_>>()
+        .into_par_iter()
+        .try_for_each(|entry| {
+            if let Some(parent) = entry.file_name.parent() {
+                fs::create_dir_all(parent)
+                    .with_context(|| format!("Couldn't create directory {}", parent.display()))?;
+            }
             let mut reader = archive.read(entry)?;
             let mut sink = File::create(&entry.file_name)
                 .with_context(|| format!("Couldn't create file {}", entry.file_name.display()))?;
             io::copy(&mut reader, &mut sink)?;
-        }
-    }
-    Ok(())
+            Ok(())
+        })
 }

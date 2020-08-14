@@ -109,7 +109,7 @@ fn read_zip(zip_path: &str) -> Result<()> {
     tree.files()
         .collect::<Vec<_>>()
         .into_par_iter()
-        .try_for_each::<_, Result<()>>(|entry| {
+        .try_for_each(|entry| {
             let mut reader = archive.read(entry)?;
             let mut sink = io::sink();
             io::copy(&mut reader, &mut sink)?;
