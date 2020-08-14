@@ -67,12 +67,12 @@ fn read_zip(zip_path: &str) -> Result<()> {
 
     match zip_path {
         "inputs/hello.zip" | "inputs/hello-prefixed.zip" => {
-            tree.from_path("hello/hi.txt")?;
-            tree.from_path("hello/rip.txt")?;
-            tree.from_path("hello/sr71.txt")?;
+            tree.get("hello/hi.txt")?;
+            tree.get("hello/rip.txt")?;
+            tree.get("hello/sr71.txt")?;
 
             let no_such_file = Path::new("no/such/file");
-            match tree.from_path(no_such_file) {
+            match tree.get(no_such_file) {
                 Err(ZipError::NoSuchFile(p)) => {
                     assert_eq!(no_such_file, p);
                 }
@@ -80,7 +80,7 @@ fn read_zip(zip_path: &str) -> Result<()> {
                 Ok(_) => panic!("Got a file back from a path with no file"),
             };
             let no_such_file = Path::new("top-level-no-such-file");
-            match tree.from_path(no_such_file) {
+            match tree.get(no_such_file) {
                 Err(ZipError::NoSuchFile(p)) => {
                     assert_eq!(no_such_file, p);
                 }
@@ -89,16 +89,16 @@ fn read_zip(zip_path: &str) -> Result<()> {
             };
 
             let invalid_path = Path::new("../nope");
-            match tree.from_path(invalid_path) {
+            match tree.get(invalid_path) {
                 Err(ZipError::InvalidPath(_)) => { /* Cool. */ }
                 Err(other) => panic!("Got incorrect error from invalid path: {:?}", other),
                 Ok(_) => panic!("Got a file back from invalid path"),
             };
         }
         "inputs/zip64.zip" => {
-            tree.from_path("zip64/zero100")?;
-            tree.from_path("zip64/zero4400")?;
-            tree.from_path("zip64/zero5000")?;
+            tree.get("zip64/zero100")?;
+            tree.get("zip64/zero4400")?;
+            tree.get("zip64/zero5000")?;
         }
         wut => unreachable!(wut),
     };

@@ -352,7 +352,7 @@ pub struct CentralDirectoryEntry<'a> {
     pub internal_file_attributes: u16,
     pub external_file_attributes: u32,
     pub header_offset: u32,
-    pub file_name: &'a [u8],
+    pub path: &'a [u8],
     pub extra_field: &'a [u8],
     pub file_comment: &'a [u8],
 }
@@ -404,14 +404,14 @@ impl<'a> CentralDirectoryEntry<'a> {
         let crc32 = read_u32(entry);
         let compressed_size = read_u32(entry);
         let uncompressed_size = read_u32(entry);
-        let file_name_length = usize(read_u16(entry))?;
+        let path_length = usize(read_u16(entry))?;
         let extra_field_length = usize(read_u16(entry))?;
         let file_comment_length = usize(read_u16(entry))?;
         let disk_number = read_u16(entry);
         let internal_file_attributes = read_u16(entry);
         let external_file_attributes = read_u32(entry);
         let header_offset = read_u32(entry);
-        let (file_name, remaining) = entry.split_at(file_name_length);
+        let (path, remaining) = entry.split_at(path_length);
         let (extra_field, remaining) = remaining.split_at(extra_field_length);
         let (file_comment, remaining) = remaining.split_at(file_comment_length);
         *entry = remaining;
@@ -430,7 +430,7 @@ impl<'a> CentralDirectoryEntry<'a> {
             internal_file_attributes,
             external_file_attributes,
             header_offset,
-            file_name,
+            path,
             extra_field,
             file_comment,
         })
@@ -458,11 +458,11 @@ impl<'a> FileMetadata<'a> {
     pub(crate) fn from_cde(cde: &CentralDirectoryEntry<'a>) -> ZipResult<Self> {
         let is_utf8 = is_utf8(cde.flags);
 
-        let file_name: Cow<Path> = if is_utf8 {
-            let utf8 = std::str::from_utf8(cde.file_name).map_err(ZipError::Encoding)?;
+        let path: Cow<Path> = if is_utf8 {
+            let utf8 = std::str::from_utf8(cde.path).map_err(ZipError::Encoding)?;
             Cow::Borrowed(Path::new(utf8))
         } else {
-            let str_cow: Cow<str> = Cow::borrow_from_cp437(cde.file_name, &CP437_CONTROL);
+            let str_cow: Cow<str> = Cow::borrow_from_cp437(cde.path, &CP437_CONTROL);
             // Annoying: doesn't seem to be any Cow<str> -> Cow<Path>
             match str_cow {
                 Cow::Borrowed(s) => Cow::Borrowed(Path::new(s)),
@@ -473,7 +473,7 @@ impl<'a> FileMetadata<'a> {
         if cde.disk_number != 0 {
             return Err(ZipError::UnsupportedArchive(format!(
                 "No support for multi-disk archives: file {} claims to be on disk {}",
-                file_name.display(),
+                path.display(),
                 cde.disk_number,
             )));
         }
@@ -483,7 +483,7 @@ impl<'a> FileMetadata<'a> {
         if encrypted {
             return Err(ZipError::UnsupportedArchive(format!(
                 "No support for encrypted files, as {} claims to be",
-                file_name
+                path
             )));
         }
         */
@@ -496,7 +496,7 @@ impl<'a> FileMetadata<'a> {
             compression_method,
             crc32: cde.crc32,
             encrypted,
-            file_name,
+            path,
             last_modified: parse_msdos(cde.last_modified_time, cde.last_modified_date),
             header_offset: usize(cde.header_offset)?,
         };
@@ -517,11 +517,11 @@ impl<'a> FileMetadata<'a> {
     ) -> ZipResult<Self> {
         let is_utf8 = is_utf8(local.flags);
 
-        let file_name: Cow<Path> = if is_utf8 {
-            let utf8 = std::str::from_utf8(local.file_name).map_err(ZipError::Encoding)?;
+        let path: Cow<Path> = if is_utf8 {
+            let utf8 = std::str::from_utf8(local.path).map_err(ZipError::Encoding)?;
             Cow::Borrowed(Path::new(utf8))
         } else {
-            let str_cow: Cow<str> = Cow::borrow_from_cp437(local.file_name, &CP437_CONTROL);
+            let str_cow: Cow<str> = Cow::borrow_from_cp437(local.path, &CP437_CONTROL);
             // Annoying: doesn't seem to be any Cow<str> -> Cow<Path>
             match str_cow {
                 Cow::Borrowed(s) => Cow::Borrowed(Path::new(s)),
@@ -539,7 +539,7 @@ impl<'a> FileMetadata<'a> {
             compression_method,
             crc32: local.crc32,
             encrypted,
-            file_name,
+            path,
             last_modified: parse_msdos(local.last_modified_time, local.last_modified_date),
             header_offset,
         };
@@ -626,7 +626,7 @@ pub struct LocalFileHeader<'a> {
     pub crc32: u32,
     pub compressed_size: u32,
     pub uncompressed_size: u32,
-    pub file_name: &'a [u8],
+    pub path: &'a [u8],
     pub extra_field: &'a [u8],
 }
 
@@ -658,9 +658,9 @@ impl<'a> LocalFileHeader<'a> {
         let crc32 = read_u32(header);
         let compressed_size = read_u32(header);
         let uncompressed_size = read_u32(header);
-        let file_name_length = usize(read_u16(header))?;
+        let path_length = usize(read_u16(header))?;
         let extra_field_length = usize(read_u16(header))?;
-        let (file_name, remaining) = header.split_at(file_name_length);
+        let (path, remaining) = header.split_at(path_length);
         let (extra_field, remaining) = remaining.split_at(extra_field_length);
         *header = remaining;
 
@@ -673,7 +673,7 @@ impl<'a> LocalFileHeader<'a> {
             crc32,
             compressed_size,
             uncompressed_size,
-            file_name,
+            path,
             extra_field,
         })
     }

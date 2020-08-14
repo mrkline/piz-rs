@@ -59,7 +59,7 @@ fn main() -> Result<()> {
 
 fn print_tree(tree: &FileTree) -> Result<()> {
     for entry in tree {
-        println!("{}", entry.metadata().file_name.display());
+        println!("{}", entry.metadata().path.display());
     }
     Ok(())
 }
@@ -69,13 +69,13 @@ fn read_zip(tree: &FileTree, archive: &ZipArchive) -> Result<()> {
         .collect::<Vec<_>>()
         .into_par_iter()
         .try_for_each(|entry| {
-            if let Some(parent) = entry.file_name.parent() {
+            if let Some(parent) = entry.path.parent() {
                 fs::create_dir_all(parent)
                     .with_context(|| format!("Couldn't create directory {}", parent.display()))?;
             }
             let mut reader = archive.read(entry)?;
-            let mut sink = File::create(&entry.file_name)
-                .with_context(|| format!("Couldn't create file {}", entry.file_name.display()))?;
+            let mut sink = File::create(&entry.path)
+                .with_context(|| format!("Couldn't create file {}", entry.path.display()))?;
             io::copy(&mut reader, &mut sink)?;
             Ok(())
         })

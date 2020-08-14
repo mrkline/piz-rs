@@ -1,10 +1,13 @@
 //! Tools for reading a ZIP archive.
 //!
+//! To start reading an archive, first create a [`ZipArchive`] from the file.
+//!
 //! Current versions of this library don't do any writing,
 //! but it was arranged to resemble the structure of the [Zip crate]
-//! and make room for potential future writing tools.
+//! and make room for potential future writers.
 //!
 //! [Zip crate]: https://crates.io/crates/zip
+//! [`ZipArchive`]: struct.ZipArchive.html
 
 use std::borrow::Cow;
 use std::collections::{btree_map, BTreeMap};
@@ -51,7 +54,7 @@ pub struct FileMetadata<'a> {
     /// True if the file is encrypted (decryption is unsupported)
     pub encrypted: bool,
     /// The provided path of the file.
-    pub file_name: Cow<'a, Path>,
+    pub path: Cow<'a, Path>,
     /// The ISO 8601 combined date and time the file was last modified
     pub last_modified: NaiveDateTime,
     /// The offset to the local file header in the archive
@@ -67,7 +70,7 @@ impl<'a> FileMetadata<'a> {
         // so we need a different approach.
         // to_str().unwrap() is safe since the provided string was UTF-8,
         // or was decoded from CP437.
-        let filename_str = self.file_name.to_str().unwrap();
+        let filename_str = self.path.to_str().unwrap();
         self.size == 0 && filename_str.ends_with('/')
     }
 
@@ -250,7 +253,7 @@ impl<'a> ZipArchive<'a> {
         if metadata.encrypted {
             return Err(ZipError::UnsupportedArchive(format!(
                 "Can't read encrypted file {}",
-                metadata.file_name.display()
+                metadata.path.display()
             )));
         }
 
@@ -300,6 +303,9 @@ impl<'a> Directory<'a> {
     }
 }
 
+/// A file or directory in a [`FileTree`]
+///
+/// [`FileTree`]: struct.FileTree.html
 #[derive(Debug)]
 pub enum DirectoryEntry<'a> {
     File(&'a FileMetadata<'a>),
@@ -316,18 +322,23 @@ impl<'a> DirectoryEntry<'a> {
     }
 
     fn name(&self) -> &'a OsStr {
-        let path = &self.metadata().file_name;
+        let path = &self.metadata().path;
         path.file_name().expect("Path ended in ..")
     }
 }
 
+/// The tree of files and directories inside a ZIP archive,
+/// created from its [`FileMetadata`] [entries].
+///
+/// [`FileMetadata`]: struct.FileMetadata.html
+/// [entries]: struct.ZipArchive.html#method.entries
 pub struct FileTree<'a> {
     /// The root directory of the archive
     pub root: DirectoryContents<'a>,
 }
 
 impl<'a> FileTree<'a> {
-    /// Given the metadata from [`ZipArchive::entries()`],
+    /// Given metadata from [`ZipArchive::entries()`],
     /// organize them into a tree of nested directories and files.
     ///
     /// This does two things:
@@ -348,8 +359,8 @@ impl<'a> FileTree<'a> {
         Ok(Self { root: contents })
     }
 
-    /// Looks up a file (or directory) by its path.
-    pub fn from_path<P: AsRef<Path>>(&self, path: P) -> ZipResult<&'a FileMetadata<'a>> {
+    /// Looks up a file or directory by its path.
+    pub fn get<P: AsRef<Path>>(&self, path: P) -> ZipResult<&'a FileMetadata<'a>> {
         let path = path.as_ref();
         let parent_dir = if let Some(parent) = path.parent() {
             match walk_parent_directories(parent, &self.root) {
@@ -391,7 +402,7 @@ fn entree_entry<'a>(
     entry: &'a FileMetadata<'a>,
     tree: &mut DirectoryContents<'a>,
 ) -> ZipResult<()> {
-    let path = &entry.file_name;
+    let path = &entry.path;
 
     let parent_dir = if let Some(parent) = path.parent() {
         walk_parent_directories_mut(parent, tree)?
@@ -482,7 +493,7 @@ fn walk_parent_directories_mut<'a, 'b>(
     Ok(current)
 }
 
-/// Used by `FileTree::from_path()` to walk the tree to the parent directory
+/// Used by `FileTree::get()` to walk the tree to the parent directory
 /// where the desired file lives.
 ///
 /// Consequently, this assumes that `path` is provided by the user,

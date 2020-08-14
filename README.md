@@ -23,22 +23,21 @@ let archive = ZipArchive::new(&mapping)?;
 //     }
 //
 // ...but ZIP doesn't guarantee that entries are in any particular order,
-// that there aren't duplicates, that an entry's has a valid file path, etc.
-// Let's arrange them into a tree of directories and files, which performs
-// some validation and makes files easier to look up.
+// that there aren't duplicates, that an entry has a valid file path, etc.
+// Let's do some validation and organize them into a tree of files and folders.
 let tree = FileTree::new(archive.entries())?;
 
 // With that done, we can get a file (or directory)'s metadata from its path.
-let metadata = tree.from_path("some/specific/file", &tree)?;
-// And read it out, if we'd like:
+let metadata = tree.get("some/specific/file")?;
+// And read the file out, if we'd like:
 let mut reader = archive.read(metadata)?;
 let mut save_to = File::create(&metadata.file_name)?;
 io::copy(&mut reader, &mut sink)?;
 
 // Readers are `Send`, so we can read out as many as we'd like in parallel.
-// Here we'll use Rayon to read out the whole archive:
+// Here we'll use Rayon to read out the whole archive with all cores:
 tree.files()
-    .collect::<Vec<_>>()
+    .collect::<Vec<_>>() // `.into_par_iter()` works on a collection.
     .into_par_iter()
     .try_for_each(|entry| {
         if let Some(parent) = entry.file_name.parent() {
@@ -55,7 +54,7 @@ tree.files()
 Zip is an interesting archive format: unlike compressed tarballs often seen
 in Linux land (`*.tar.gz`, `*.tar.zst`, ...),
 each file in a Zip archive is compressed independently,
-with a central directory  telling us where to find each file.
+with a central directory telling us where to find each file.
 This allows us to extract multiple files simultaneously so long as we can
 read from multiple places at once.
 
