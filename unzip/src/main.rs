@@ -58,8 +58,8 @@ fn main() -> Result<()> {
 }
 
 fn print_tree(tree: &FileTree) -> Result<()> {
-    for entry in tree.files() {
-        println!("{}", entry.file_name.display());
+    for entry in tree {
+        println!("{}", entry.metadata().file_name.display());
     }
     Ok(())
 }

@@ -369,6 +369,10 @@ impl<'a> FileTree<'a> {
             .map(|dir_entry| dir_entry.metadata())
     }
 
+    pub fn iter(&self) -> TreeIterator<'a, '_> {
+        TreeIterator::new(&self.root)
+    }
+
     /// Returns an iterator over the files in the tree
     pub fn files(&self) -> FileTreeIterator<'a, '_> {
         FileTreeIterator::new(&self.root)
@@ -535,6 +539,49 @@ fn walk_parent_directories<'a, 'b>(
     Ok(current)
 }
 
+pub struct TreeIterator<'a, 'b> {
+    stack: Vec<btree_map::Values<'b, &'a OsStr, DirectoryEntry<'a>>>,
+}
+
+impl<'a, 'b> TreeIterator<'a, 'b> {
+    fn new(tree: &'b DirectoryContents<'a>) -> Self {
+        let stack = vec![tree.values()];
+        Self { stack }
+    }
+}
+
+impl<'a, 'b> Iterator for TreeIterator<'a, 'b> {
+    type Item = &'b DirectoryEntry<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.stack.is_empty() {
+            return None;
+        }
+        let next = self.stack.last_mut().unwrap().next();
+        match next {
+            Some(entry) => {
+                if let DirectoryEntry::Directory(d) = entry {
+                    self.stack.push(d.children.values());
+                }
+                return Some(entry);
+            }
+            None => {
+                self.stack.pop();
+            }
+        };
+        self.next()
+    }
+}
+
+impl<'a, 'b> IntoIterator for &'b FileTree<'a> {
+    type Item = &'b DirectoryEntry<'a>;
+    type IntoIter = TreeIterator<'a, 'b>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
 pub struct FileTreeIterator<'a, 'b> {
     stack: Vec<btree_map::Values<'b, &'a OsStr, DirectoryEntry<'a>>>,
 }
@@ -566,14 +613,5 @@ impl<'a> Iterator for FileTreeIterator<'a, '_> {
             }
         };
         self.next()
-    }
-}
-
-impl<'a, 'b> IntoIterator for &'b FileTree<'a> {
-    type Item = &'a FileMetadata<'a>;
-    type IntoIter = FileTreeIterator<'a, 'b>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.files()
     }
 }
