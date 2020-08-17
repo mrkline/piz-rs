@@ -24,7 +24,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Run unit tests and doctests
-      run: cargo test
+      run: cargo test --release
     - name: Run test harness
       run: cd test_harness && cargo run --release -- -v
 
