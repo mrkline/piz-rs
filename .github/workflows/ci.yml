@@ -23,6 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
+    - name: Build all
+      run: cargo build --release
     - name: Run unit tests and doctests
       run: cargo test --release
     - name: Run test harness
