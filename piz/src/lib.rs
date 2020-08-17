@@ -1,13 +1,26 @@
 //! piz is a Zip archive reader designed to decompress any number of files
 //! concurrently using a simple API:
 //!
-//! ```rust
+//! ```no_run
+//! # use std::fs;
+//! # use piz::*;
 //! // For smaller files,
-//! //
-//! //     let bytes = fs::read("foo.zip")
-//! //     let archive = ZipArchive::new(&bytes)?;
-//! //
-//! // works just fine. For larger ones, memory map!
+//! let bytes = fs::read("foo.zip")?;
+//! let archive = ZipArchive::new(&bytes)?;
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//! works just fine. Memory map larger files!
+//! ```no_run
+//! # use std::fs::{self, File};
+//! # use std::io;
+//! # extern crate anyhow;
+//! # extern crate rayon;
+//! # use rayon::prelude::*;
+//! # extern crate memmap;
+//! # use memmap::Mmap;
+//! # use piz::*;
+//! # use piz::read::*;
+//! #
 //! let zip_file = File::open("foo.zip")?;
 //! let mapping = unsafe { Mmap::map(&zip_file)? };
 //! let archive = ZipArchive::new(&mapping)?;
@@ -29,7 +42,7 @@
 //! // And read the file out, if we'd like:
 //! let mut reader = archive.read(metadata)?;
 //! let mut save_to = File::create(&metadata.path)?;
-//! io::copy(&mut reader, &mut sink)?;
+//! io::copy(&mut reader, &mut save_to)?;
 //!
 //! // Readers are `Send`, so we can read out as many as we'd like in parallel.
 //! // Here we'll use Rayon to read out the whole archive with all cores:
@@ -44,8 +57,10 @@
 //!         let mut reader = archive.read(entry)?;
 //!         let mut sink = File::create(&entry.path)?;
 //!         io::copy(&mut reader, &mut sink)?;
+//!         # return Ok::<(), anyhow::Error>(());
 //!         Ok(())
 //!     })?;
+//! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
 //! Zip is an interesting archive format: unlike compressed tarballs often seen
@@ -71,11 +86,3 @@ pub use read::ZipArchive;
 mod arch;
 mod crc_reader;
 mod spec;
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn there_are_four_lights() {
-        assert_ne!(2 + 2, 5);
-    }
-}

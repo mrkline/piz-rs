@@ -92,14 +92,25 @@ impl<'a> ZipArchive<'a> {
     /// Reads a ZIP archive from a byte slice.
     /// Smaller files can be read into a buffer.
     ///
-    ///     let bytes = fs::read("foo.zip")?;
-    ///     let archive = ZipArchive::new(&bytes)?;
+    /// ```no_run
+    /// # use std::fs;
+    /// # use piz::*;
+    /// let bytes = fs::read("foo.zip")?;
+    /// let archive = ZipArchive::new(&bytes)?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     ///
     /// For larger ones, memory map!
-    ///
-    ///     let zip_file = File::open("foo.zip")?;
-    ///     let mapping = unsafe { Mmap::map(&zip_file)? };
-    ///     let archive = ZipArchive::new(&mapping)?;
+    /// ```no_run
+    /// # use std::fs::{self, File};
+    /// # extern crate memmap;
+    /// # use memmap::Mmap;
+    /// # use piz::*;
+    /// let zip_file = File::open("foo.zip")?;
+    /// let mapping = unsafe { Mmap::map(&zip_file)? };
+    /// let archive = ZipArchive::new(&mapping)?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn new(mapping: &'a [u8]) -> ZipResult<Self> {
         let (new_archive, archive_offset) = Self::with_prepended_data(mapping)?;
         if archive_offset != 0 {

@@ -10,7 +10,7 @@ concurrently using a simple API:
 //     let bytes = fs::read("foo.zip")
 //     let archive = ZipArchive::new(&bytes)?;
 //
-// works just fine. For larger ones, memory map!
+// works just fine. Memory map larger files!
 let zip_file = File::open("foo.zip")?;
 let mapping = unsafe { Mmap::map(&zip_file)? };
 let archive = ZipArchive::new(&mapping)?;
@@ -32,7 +32,7 @@ let metadata = tree.get("some/specific/file")?;
 // And read the file out, if we'd like:
 let mut reader = archive.read(metadata)?;
 let mut save_to = File::create(&metadata.file_name)?;
-io::copy(&mut reader, &mut sink)?;
+io::copy(&mut reader, &mut save_to)?;
 
 // Readers are `Send`, so we can read out as many as we'd like in parallel.
 // Here we'll use Rayon to read out the whole archive with all cores:
