@@ -84,8 +84,9 @@ If it doesn't find these files, it creates them with a shell script
 
 ## Future plans
 
-Currently piz provides very limited metadata (file name, size, CRC32, etc.).
-Additional data (permissions, last-modified time, etc.) should be added later.
+Piz currently provides limited metadata for each file
+(path, size, CRC32, last-modified time, etc.).
+Additional info - like file permissions - should be added later.
 Support for compression algorithms besides DEFLATE (like Bzip2) could also be added.
 
 ## Thanks
