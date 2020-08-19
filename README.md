@@ -45,8 +45,8 @@ tree.files()
             fs::create_dir_all(parent)?;
         }
         let mut reader = archive.read(entry)?;
-        let mut sink = File::create(&entry.file_name)?;
-        io::copy(&mut reader, &mut sink)?;
+        let mut save_to = File::create(&entry.file_name)?;
+        io::copy(&mut reader, &mut save_to)?;
         Ok(())
     })?;
 ```
