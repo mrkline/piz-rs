@@ -107,12 +107,13 @@ fn read_zip(zip_path: &str) -> Result<()> {
     // (When the reader gets dropped, the file's CRC32 will be checked
     // against the one stored in the archive.)
     tree.files()
-        .collect::<Vec<_>>()
+        .map(|e| archive.read(e))
+        .collect::<Result<Vec<_>, ZipError>>()?
         .into_par_iter()
-        .try_for_each(|entry| {
-            let mut reader = archive.read(entry)?;
+        .try_for_each::<_, Result<()>>(|mut reader| {
             let mut sink = io::sink();
             io::copy(&mut reader, &mut sink)?;
             Ok(())
-        })
+        })?;
+    Ok(())
 }
