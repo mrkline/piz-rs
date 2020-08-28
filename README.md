@@ -25,10 +25,10 @@ let archive = ZipArchive::new(&mapping)?;
 // ...but ZIP doesn't guarantee that entries are in any particular order,
 // that there aren't duplicates, that an entry has a valid file path, etc.
 // Let's do some validation and organize them into a tree of files and folders.
-let tree = FileTree::new(archive.entries())?;
+let tree = as_tree(archive.entries())?;
 
 // With that done, we can get a file (or directory)'s metadata from its path.
-let metadata = tree.get("some/specific/file")?;
+let metadata = tree.lookup("some/specific/file")?;
 // And read the file out, if we'd like:
 let mut reader = archive.read(metadata)?;
 let mut save_to = File::create(&metadata.file_name)?;

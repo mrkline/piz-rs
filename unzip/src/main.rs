@@ -48,7 +48,7 @@ fn main() -> Result<()> {
     let archive = ZipArchive::with_prepended_data(&mapping)
         .context("Couldn't load archive")?
         .0;
-    let tree = FileTree::new(archive.entries())?;
+    let tree = as_tree(archive.entries())?;
 
     if args.dry_run {
         print_tree(&tree)
@@ -57,14 +57,14 @@ fn main() -> Result<()> {
     }
 }
 
-fn print_tree(tree: &FileTree) -> Result<()> {
-    for entry in tree {
+fn print_tree(tree: &DirectoryContents) -> Result<()> {
+    for entry in tree.traverse() {
         println!("{}", entry.metadata().path.display());
     }
     Ok(())
 }
 
-fn read_zip(tree: &FileTree, archive: &ZipArchive) -> Result<()> {
+fn read_zip(tree: &DirectoryContents, archive: &ZipArchive) -> Result<()> {
     tree.files()
         .collect::<Vec<_>>()
         .into_par_iter()

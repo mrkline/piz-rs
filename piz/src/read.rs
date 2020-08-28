@@ -338,48 +338,51 @@ impl<'a> DirectoryEntry<'a> {
     }
 }
 
-/// The tree of files and directories inside a ZIP archive,
-/// created from its [`FileMetadata`] [entries].
+/// Given metadata from [`ZipArchive::entries()`],
+/// organize them into a tree of nested directories and files.
 ///
-/// [`FileMetadata`]: struct.FileMetadata.html
-/// [entries]: struct.ZipArchive.html#method.entries
-pub struct FileTree<'a> {
-    /// The root directory of the archive
-    pub root: DirectoryContents<'a>,
-}
+/// This does two things:
+///
+/// 1. It makes files easier to look up by path
+///
+/// 2. It validates the archive, making sure each `FileMetadata` has a valid path,
+///    no duplicates, etc. (The ZIP file format makes no promises here.)
+///
+/// [`ZipArchive::entries()`]: struct.ZipArchive.html#method.entries
+pub fn as_tree<'a>(entries: &'a [FileMetadata<'a>]) -> ZipResult<DirectoryContents<'a>> {
+    let mut contents = DirectoryContents::new();
 
-impl<'a> FileTree<'a> {
-    /// Given metadata from [`ZipArchive::entries()`],
-    /// organize them into a tree of nested directories and files.
-    ///
-    /// This does two things:
-    ///
-    /// 1. It makes files easier to look up by path
-    ///
-    /// 2. It validates the archive, making sure each `FileMetadata` has a valid path,
-    ///    no duplicates, etc. (The ZIP file format makes no promises here.)
-    ///
-    /// [`ZipArchive::entries()`]: struct.ZipArchive.html#method.entries
-    pub fn new(entries: &'a [FileMetadata<'a>]) -> ZipResult<Self> {
-        let mut contents = DirectoryContents::new();
-
-        for entry in entries {
-            entree_entry(entry, &mut contents)?;
-        }
-
-        Ok(Self { root: contents })
+    for entry in entries {
+        entree_entry(entry, &mut contents)?;
     }
 
+    Ok(contents)
+}
+
+pub trait FileTree<'a> {
     /// Looks up a file or directory by its path.
-    pub fn get<P: AsRef<Path>>(&self, path: P) -> ZipResult<&'a FileMetadata<'a>> {
+    fn lookup<P: AsRef<Path>>(&self, path: P) -> ZipResult<&'a FileMetadata<'a>>;
+
+    /// Returns an iterator over the entries in the tree, sorted by path.
+    fn traverse<'b>(&'b self) -> TreeIterator<'a, 'b>;
+
+    /// Returns an iterator over the files in the tree, sorted by path.
+    fn files<'b>(&'b self) -> FileTreeIterator<'a, 'b>;
+
+    /// Returns an iterator over the directories in the tree, sorted by path.
+    fn directories<'b>(&'b self) -> DirectoryTreeIterator<'a, 'b>;
+}
+
+impl<'a> FileTree<'a> for DirectoryContents<'a> {
+    fn lookup<P: AsRef<Path>>(&self, path: P) -> ZipResult<&'a FileMetadata<'a>> {
         let path = path.as_ref();
         let parent_dir = if let Some(parent) = path.parent() {
-            match walk_parent_directories(parent, &self.root) {
+            match walk_parent_directories(parent, &self) {
                 Err(ZipError::NoSuchFile(_)) => Err(ZipError::NoSuchFile(path.to_owned())),
                 other_result => other_result,
             }?
         } else {
-            &self.root
+            &self
         };
 
         let base = path
@@ -392,19 +395,16 @@ impl<'a> FileTree<'a> {
             .map(|dir_entry| dir_entry.metadata())
     }
 
-    /// Returns an iterator over the entries in the tree, sorted by path.
-    pub fn iter(&self) -> TreeIterator<'a, '_> {
-        TreeIterator::new(&self.root)
+    fn traverse<'b>(&'b self) -> TreeIterator<'a, 'b> {
+        TreeIterator::new(&self)
     }
 
-    /// Returns an iterator over the files in the tree, sorted by path.
-    pub fn files(&self) -> FileTreeIterator<'a, '_> {
-        FileTreeIterator::new(&self.root)
+    fn files<'b>(&'b self) -> FileTreeIterator<'a, 'b> {
+        FileTreeIterator::new(&self)
     }
 
-    /// Returns an iterator over the directories in the tree, sorted by path.
-    pub fn directories(&self) -> DirectoryTreeIterator<'a, '_> {
-        DirectoryTreeIterator::new(&self.root)
+    fn directories<'b>(&'b self) -> DirectoryTreeIterator<'a, 'b> {
+        DirectoryTreeIterator::new(&self)
     }
 }
 
@@ -602,15 +602,6 @@ impl<'a, 'b> Iterator for TreeIterator<'a, 'b> {
             }
         };
         self.next()
-    }
-}
-
-impl<'a, 'b> IntoIterator for &'b FileTree<'a> {
-    type Item = &'b DirectoryEntry<'a>;
-    type IntoIter = TreeIterator<'a, 'b>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.iter()
     }
 }
 
