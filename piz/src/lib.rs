@@ -47,8 +47,7 @@
 //! // Readers are `Send`, so we can read out as many as we'd like in parallel.
 //! // Here we'll use Rayon to read out the whole archive with all cores:
 //! tree.files()
-//!     .collect::<Vec<_>>() // `.into_par_iter()` works on a collection.
-//!     .into_par_iter()
+//!     .par_bridge()
 //!     .try_for_each(|entry| {
 //!         if let Some(parent) = entry.path.parent() {
 //!             // Create parent directories as needed.

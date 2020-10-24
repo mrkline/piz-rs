@@ -108,11 +108,10 @@ fn read_zip(zip_path: &str) -> Result<()> {
     // against the one stored in the archive.)
     tree.files()
         .map(|e| archive.read(e))
-        .collect::<Result<Vec<_>, ZipError>>()?
-        .into_par_iter()
-        .try_for_each::<_, Result<()>>(|mut reader| {
+        .par_bridge()
+        .try_for_each::<_, Result<()>>(|reader| {
             let mut sink = io::sink();
-            io::copy(&mut reader, &mut sink)?;
+            io::copy(&mut reader?, &mut sink)?;
             Ok(())
         })?;
     Ok(())
