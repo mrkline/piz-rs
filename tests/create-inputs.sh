@@ -2,8 +2,7 @@
 
 set -euo pipefail
 
-mkdir -p inputs
-cd inputs
+cd tests/inputs
 
 echo "Setting up test environment..."
 rm -f *.zip

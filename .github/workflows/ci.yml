@@ -15,7 +15,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Cargo fmt
-      run: cargo fmt --all -- --check
+      run: cargo fmt -- --check
     - name: Cargo doc
       run: cargo doc
 
@@ -23,10 +23,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - name: Build all
-      run: cargo build --release
-    - name: Run unit tests and doctests
+    - name: Build lib, tests, and examples
+      run: cargo build --all-targets --release
+    - name: Build test inputs
+      run: ./tests/create-inputs.sh
+    - name: Run tests
       run: cargo test --release
-    - name: Run test harness
-      run: cd test_harness && cargo run --release -- -v
-
