@@ -53,7 +53,7 @@ tree.files()
 Zip is an interesting archive format: unlike compressed tarballs often seen
 in Linux land (`*.tar.gz`, `*.tar.zst`, ...),
 each file in a Zip archive is compressed independently,
-with a central directory telling us where to find each file.
+with a central directory telling us where to find it.
 This allows us to extract multiple files simultaneously so long as we can
 read from multiple places at once.
 
