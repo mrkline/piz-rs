@@ -255,7 +255,7 @@ impl<'a> ZipArchive<'a> {
         let local_metadata =
             FileMetadata::from_local_header(&local_header, metadata.header_offset)?;
         debug!("Reading {:?}", local_metadata);
-        if *metadata != local_metadata {
+        if cfg!(feature = "check-local-metadata") && *metadata != local_metadata {
             return Err(ZipError::InvalidArchive(
                 "Central directory entry doesn't match local file header",
             ));

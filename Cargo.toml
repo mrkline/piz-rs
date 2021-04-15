@@ -29,5 +29,9 @@ anyhow = "1.0"
 env_logger = "0.8"
 rayon = "1.0"
 memmap = "0.7"
-stderrlog = "0.4"
+stderrlog = "0.5.1"
 structopt = "0.3"
+
+[features]
+default = ["check-local-metadata"]
+check-local-metadata = []
