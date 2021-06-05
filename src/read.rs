@@ -13,7 +13,7 @@ use std::borrow::Cow;
 use std::collections::{btree_map, BTreeMap};
 use std::ffi::OsStr;
 use std::io;
-use std::path::{Component, Path};
+use std::path::{Component, Path, PathBuf};
 
 use chrono::NaiveDateTime;
 use flate2::read::DeflateDecoder;
@@ -63,6 +63,30 @@ pub struct FileMetadata<'a> {
     // time, etc.
 }
 
+/// Metadata for a file or directory in the archive,
+/// retrieved from its central directory
+#[derive(Debug, PartialEq, Eq)]
+pub struct FileMetadataOwned {
+    /// Uncompressed size of the file in bytes
+    pub size: usize,
+    /// Compressed size of the file in bytes
+    pub compressed_size: usize,
+    /// Compression algorithm used to store the file
+    pub compression_method: CompressionMethod,
+    /// The CRC-32 of the decompressed file
+    pub crc32: u32,
+    /// True if the file is encrypted (decryption is unsupported)
+    pub encrypted: bool,
+    /// The provided path of the file.
+    pub path: PathBuf,
+    /// The ISO 8601 combined date and time the file was last modified
+    pub last_modified: NaiveDateTime,
+    /// The offset to the local file header in the archive
+    pub(crate) header_offset: usize,
+    // TODO: Add other fields the user might want to know about:
+    // time, etc.
+}
+
 impl<'a> FileMetadata<'a> {
     /// Returns true if the given entry is a directory
     pub fn is_dir(&self) -> bool {
@@ -77,6 +101,34 @@ impl<'a> FileMetadata<'a> {
     /// Returns true if the given entry is a file
     pub fn is_file(&self) -> bool {
         !self.is_dir()
+    }
+
+    pub fn to_owned(&self) -> FileMetadataOwned {
+        FileMetadataOwned {
+            size: self.size,
+            compressed_size: self.compressed_size,
+            compression_method: self.compression_method,
+            crc32: self.crc32,
+            encrypted: self.encrypted,
+            path: self.path.to_path_buf(),
+            last_modified: self.last_modified,
+            header_offset: self.header_offset
+        }
+    }
+}
+
+impl FileMetadataOwned {
+    pub fn as_ref(&self) -> FileMetadata<'_> {
+        FileMetadata {
+            size: self.size,
+            compressed_size: self.compressed_size,
+            compression_method: self.compression_method,
+            crc32: self.crc32,
+            encrypted: self.encrypted,
+            path: Cow::Borrowed(&self.path),
+            last_modified: self.last_modified,
+            header_offset: self.header_offset
+        }
     }
 }
 
