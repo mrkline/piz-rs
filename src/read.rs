@@ -44,22 +44,37 @@ pub enum CompressionMethod {
 pub struct FileMetadata<'a> {
     /// Uncompressed size of the file in bytes
     pub size: usize,
+
     /// Compressed size of the file in bytes
     pub compressed_size: usize,
+
     /// Compression algorithm used to store the file
     pub compression_method: CompressionMethod,
+
     /// The CRC-32 of the decompressed file
     pub crc32: u32,
+
     /// True if the file is encrypted (decryption is unsupported)
     pub encrypted: bool,
+
     /// The provided path of the file.
     pub path: Cow<'a, Utf8Path>,
+
     /// The ISO 8601 combined date and time the file was last modified
     pub last_modified: NaiveDateTime,
-    /// The offset to the local file header in the archive
-    pub(crate) header_offset: usize,
+
+    /// Unix mode bits, if the file was archived in a Unix OS.
+    ///
+    /// This library does _not_ try to convert DOS permission bits into
+    /// roughly-equivalent Unix mode bits, or do other cross-OS handwaving.
+    /// Future versions might provide an enum here of different OS's metadata.
+    pub unix_mode: Option<u16>,
+
     // TODO: Add other fields the user might want to know about:
     // time, etc.
+
+    /// The offset to the local file header in the archive
+    pub(crate) header_offset: usize,
 }
 
 impl<'a> FileMetadata<'a> {
@@ -256,7 +271,7 @@ impl<'a> ZipArchive<'a> {
         let local_header = spec::LocalFileHeader::parse_and_consume(&mut file_slice)?;
         trace!("{:?}", local_header);
         let local_metadata =
-            FileMetadata::from_local_header(&local_header, metadata.header_offset)?;
+            FileMetadata::from_local_header(&local_header, metadata)?;
         debug!("Reading {:?}", local_metadata);
         if cfg!(feature = "check-local-metadata") && *metadata != local_metadata {
             return Err(ZipError::InvalidArchive(
