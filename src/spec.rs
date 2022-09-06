@@ -19,7 +19,7 @@ use std::path::Path;
 
 use chrono::{NaiveDate, NaiveDateTime};
 use codepage_437::*;
-use twoway::{find_bytes, rfind_bytes};
+use memchr::memmem;
 
 use crate::arch::usize;
 use crate::read::{CompressionMethod, FileMetadata};
@@ -179,7 +179,7 @@ impl<'a> EndOfCentralDirectory<'a> {
 /// It should be right at the end of the file,
 /// but its variable size means we can't jump to a known offset.
 pub fn find_eocdr(mapping: &[u8]) -> ZipResult<usize> {
-    rfind_bytes(mapping, &EOCDR_MAGIC).ok_or(ZipError::InvalidArchive(
+    memmem::rfind(mapping, &EOCDR_MAGIC).ok_or(ZipError::InvalidArchive(
         "Couldn't find End Of Central Directory Record",
     ))
 }
@@ -328,7 +328,7 @@ impl<'a> Zip64EndOfCentralDirectory<'a> {
 /// but we might have to do some searching since ZIP archives can have
 /// arbitrary junk up front.
 pub fn find_zip64_eocdr(mapping: &[u8]) -> ZipResult<usize> {
-    find_bytes(mapping, &ZIP64_EOCDR_MAGIC).ok_or(ZipError::InvalidArchive(
+    memmem::find(mapping, &ZIP64_EOCDR_MAGIC).ok_or(ZipError::InvalidArchive(
         "Couldn't find zip64 End Of Central Directory Record",
     ))
 }
