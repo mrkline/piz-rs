@@ -78,6 +78,13 @@ impl<'a> FileMetadata<'a> {
     pub fn is_file(&self) -> bool {
         !self.is_dir()
     }
+
+    pub fn into_owned(self) -> FileMetadata<'static> {
+        FileMetadata {
+            path: Cow::Owned(self.path.into_owned()),
+            ..self
+        }
+    }
 }
 
 /// A ZIP archive to be read
