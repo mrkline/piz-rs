@@ -3,7 +3,7 @@ use std::io;
 use std::path::Path;
 use std::process::Command;
 
-use anyhow::*;
+use anyhow::{Context, Result};
 use log::*;
 use memmap::Mmap;
 use rayon::prelude::*;
@@ -81,7 +81,7 @@ fn read_zip(zip_path: &str) -> Result<()> {
             tree.lookup("zip64/zero4400")?;
             tree.lookup("zip64/zero5000")?;
         }
-        wut => unreachable!(wut),
+        wut => unreachable!("{}", wut),
     };
 
     // Try reading out each file in the archive.
