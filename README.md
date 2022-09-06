@@ -31,7 +31,7 @@ let tree = as_tree(archive.entries())?;
 let metadata = tree.lookup("some/specific/file")?;
 // And read the file out, if we'd like:
 let mut reader = archive.read(metadata)?;
-let mut save_to = File::create(&metadata.file_name)?;
+let mut save_to = File::create(&*metadata.path)?;
 io::copy(&mut reader, &mut save_to)?;
 
 // Readers are `Send`, so we can read out as many as we'd like in parallel.
@@ -39,12 +39,12 @@ io::copy(&mut reader, &mut save_to)?;
 tree.files()
     .par_bridge()
     .try_for_each(|entry| {
-        if let Some(parent) = entry.file_name.parent() {
+        if let Some(parent) = entry.path.parent() {
             // Create parent directories as needed.
             fs::create_dir_all(parent)?;
         }
         let mut reader = archive.read(entry)?;
-        let mut save_to = File::create(&entry.file_name)?;
+        let mut save_to = File::create(&*entry.path)?;
         io::copy(&mut reader, &mut save_to)?;
         Ok(())
     })?;
@@ -66,12 +66,12 @@ if the archive is small enough.)
 
 ## Examples
 
-See `unzip/` for a simple CLI example that unzips a provided file
+See `examples/unzip.rs` for a simple CLI example that unzips a provided file
 into the current directory.
 
 ## Tests
 
-`test_harness/` contains some smoke tests against a few inputs, e.g.:
+`tests/` contains some smoke tests against a few inputs, e.g.:
 
 - A basic, "Hello, Zip!" archive of a few text files
 - The same, but with some junk prepended to it
