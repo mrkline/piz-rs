@@ -11,10 +11,9 @@
 
 use std::borrow::Cow;
 use std::collections::{btree_map, BTreeMap};
-use std::ffi::OsStr;
 use std::io;
-use std::path::{Component, Path};
 
+use camino::{Utf8Component, Utf8Path};
 use chrono::NaiveDateTime;
 use flate2::read::DeflateDecoder;
 use log::*;
@@ -54,7 +53,7 @@ pub struct FileMetadata<'a> {
     /// True if the file is encrypted (decryption is unsupported)
     pub encrypted: bool,
     /// The provided path of the file.
-    pub path: Cow<'a, Path>,
+    pub path: Cow<'a, Utf8Path>,
     /// The ISO 8601 combined date and time the file was last modified
     pub last_modified: NaiveDateTime,
     /// The offset to the local file header in the archive
@@ -68,10 +67,7 @@ impl<'a> FileMetadata<'a> {
     pub fn is_dir(&self) -> bool {
         // Path::ends_with() doesn't consider separators,
         // so we need a different approach.
-        // to_str().unwrap() is safe since the provided string was UTF-8,
-        // or was decoded from CP437.
-        let filename_str = self.path.to_str().unwrap();
-        self.size == 0 && filename_str.ends_with('/')
+        self.size == 0 && self.path.as_str().ends_with('/')
     }
 
     /// Returns true if the given entry is a file
@@ -271,7 +267,7 @@ impl<'a> ZipArchive<'a> {
         if metadata.encrypted {
             return Err(ZipError::UnsupportedArchive(format!(
                 "Can't read encrypted file {}",
-                metadata.path.display()
+                metadata.path
             )));
         }
 
@@ -303,7 +299,7 @@ fn make_reader<'a, R: io::Read + Send + 'a>(
 }
 
 /// Maps a directory's child paths to the respective entries.
-pub type DirectoryContents<'a> = BTreeMap<&'a OsStr, DirectoryEntry<'a>>;
+pub type DirectoryContents<'a> = BTreeMap<&'a str, DirectoryEntry<'a>>;
 
 /// A directory in a ZipArchive, including its metadata and its contents.
 #[derive(Debug)]
@@ -339,7 +335,7 @@ impl<'a> DirectoryEntry<'a> {
         }
     }
 
-    fn name(&self) -> &'a OsStr {
+    fn name(&self) -> &'a str {
         let path = &self.metadata().path;
         path.file_name().expect("Path ended in ..")
     }
@@ -368,7 +364,7 @@ pub fn as_tree<'a>(entries: &'a [FileMetadata<'a>]) -> ZipResult<DirectoryConten
 
 pub trait FileTree<'a> {
     /// Looks up a file or directory by its path.
-    fn lookup<P: AsRef<Path>>(&self, path: P) -> ZipResult<&'a FileMetadata<'a>>;
+    fn lookup<P: AsRef<Utf8Path>>(&self, path: P) -> ZipResult<&'a FileMetadata<'a>>;
 
     /// Returns an iterator over the entries in the tree, sorted by path.
     fn traverse<'b>(&'b self) -> TreeIterator<'a, 'b>;
@@ -381,7 +377,7 @@ pub trait FileTree<'a> {
 }
 
 impl<'a> FileTree<'a> for DirectoryContents<'a> {
-    fn lookup<P: AsRef<Path>>(&self, path: P) -> ZipResult<&'a FileMetadata<'a>> {
+    fn lookup<P: AsRef<Utf8Path>>(&self, path: P) -> ZipResult<&'a FileMetadata<'a>> {
         let path = path.as_ref();
         let parent_dir = if let Some(parent) = path.parent() {
             match walk_parent_directories(parent, self) {
@@ -394,7 +390,7 @@ impl<'a> FileTree<'a> for DirectoryContents<'a> {
 
         let base = path
             .file_name()
-            .ok_or_else(|| ZipError::InvalidPath(format!("Path {} ended in ..", path.display())))?;
+            .ok_or_else(|| ZipError::InvalidPath(format!("Path {} ended in ..", path)))?;
 
         parent_dir
             .get(base)
@@ -431,7 +427,7 @@ fn entree_entry<'a>(
     // Check: Path doesn't end in something weird.
     let _base = path
         .file_name()
-        .ok_or_else(|| ZipError::Hierarchy(format!("Path {} ended in ..", path.display())))?;
+        .ok_or_else(|| ZipError::Hierarchy(format!("Path {path} ended in ..")))?;
 
     let to_insert: DirectoryEntry = if entry.is_dir() {
         DirectoryEntry::Directory(Directory::new(entry))
@@ -440,10 +436,7 @@ fn entree_entry<'a>(
     };
 
     if parent_dir.insert(to_insert.name(), to_insert).is_some() {
-        return Err(ZipError::Hierarchy(format!(
-            "Duplicate entry for {}",
-            path.display()
-        )));
+        return Err(ZipError::Hierarchy(format!("Duplicate entry for {path}",)));
     }
 
     Ok(())
@@ -451,42 +444,40 @@ fn entree_entry<'a>(
 
 /// Used by `entree_entry()` to reach the directory where we'll insert a new entry.
 fn walk_parent_directories_mut<'a, 'b>(
-    path: &Path,
+    path: &Utf8Path,
     tree: &'b mut DirectoryContents<'a>,
 ) -> ZipResult<&'b mut DirectoryContents<'a>> {
     let mut current = tree;
 
     for component in path.components() {
         match component {
-            Component::Prefix(prefix) => {
+            Utf8Component::Prefix(prefix) => {
                 let prefix = prefix.as_os_str();
                 return Err(ZipError::Hierarchy(format!(
-                    "Prefix {} found in path {}",
+                    "Prefix {} found in path {path}",
                     prefix.to_string_lossy(),
-                    path.display()
                 )));
             }
-            Component::RootDir => {
-                warn!("Root directory found in path {}", path.display());
+            Utf8Component::RootDir => {
+                warn!("Root directory found in path {path}");
                 // Huh. Keep going.
             }
-            Component::CurDir => {
-                warn!("Current dir (.) found in path {}", path.display());
+            Utf8Component::CurDir => {
+                warn!("Current dir (.) found in path {path}");
                 // Huh. Keep going.
             }
-            Component::ParentDir => {
+            Utf8Component::ParentDir => {
                 // We could canonicalize it somewhere down the road.
                 // Path::canonicalize() doesn't work because it tries
                 // to actually resolve the path
                 // (and failing if something doesn't exist there).
                 // Maybe try https://crates.io/crates/path-clean some time?
                 return Err(ZipError::Hierarchy(format!(
-                    "Parent dir (..) found in path {}",
-                    path.display()
+                    "Parent dir (..) found in path {path}",
                 )));
             }
 
-            Component::Normal(component) => {
+            Utf8Component::Normal(component) => {
                 if let Some(child) = current.get_mut(component) {
                     match child {
                         DirectoryEntry::Directory(dir) => {
@@ -494,15 +485,13 @@ fn walk_parent_directories_mut<'a, 'b>(
                         }
                         _ => {
                             return Err(ZipError::Hierarchy(format!(
-                                "{} is a file, expected a directory",
-                                path.display()
+                                "{path} is a file, expected a directory",
                             )));
                         }
                     }
                 } else {
                     return Err(ZipError::Hierarchy(format!(
-                        "{} found before parent directories",
-                        path.display()
+                        "{path} found before parent directories",
                     )));
                 }
             }
@@ -517,7 +506,7 @@ fn walk_parent_directories_mut<'a, 'b>(
 /// Consequently, this assumes that `path` is provided by the user,
 /// and emits errors accordingly.
 fn walk_parent_directories<'a, 'b>(
-    path: &Path,
+    path: &Utf8Path,
     tree: &'b DirectoryContents<'a>,
 ) -> ZipResult<&'b DirectoryContents<'a>> {
     let mut current = tree;
@@ -526,34 +515,28 @@ fn walk_parent_directories<'a, 'b>(
         // The path is coming from the user, not the ZIP archive.
         // So, unlike walk_parent_directories_mut(), revolt over weird stuff.
         match component {
-            Component::Prefix(prefix) => {
-                let prefix = prefix.as_os_str();
+            Utf8Component::Prefix(prefix) => {
                 return Err(ZipError::InvalidPath(format!(
-                    "Prefix {} found in path {}",
-                    prefix.to_string_lossy(),
-                    path.display()
+                    "Prefix {prefix} found in path {path}",
                 )));
             }
-            Component::RootDir => {
+            Utf8Component::RootDir => {
                 return Err(ZipError::InvalidPath(format!(
-                    "Root directory found in path {}",
-                    path.display()
+                    "Root directory found in path {path}",
                 )));
             }
-            Component::CurDir => {
+            Utf8Component::CurDir => {
                 return Err(ZipError::InvalidPath(format!(
-                    "Current dir (.) found in path {}",
-                    path.display()
+                    "Current dir (.) found in path {path}",
                 )));
             }
-            Component::ParentDir => {
+            Utf8Component::ParentDir => {
                 return Err(ZipError::InvalidPath(format!(
-                    "Parent dir (..) found in path {}",
-                    path.display()
+                    "Parent dir (..) found in path {path}",
                 )));
             }
 
-            Component::Normal(component) => {
+            Utf8Component::Normal(component) => {
                 if let Some(child) = current.get(component) {
                     match child {
                         DirectoryEntry::Directory(dir) => {
@@ -561,8 +544,7 @@ fn walk_parent_directories<'a, 'b>(
                         }
                         _ => {
                             return Err(ZipError::InvalidPath(format!(
-                                "{} is a file, expected a directory",
-                                path.display()
+                                "{path} is a file, expected a directory",
                             )));
                         }
                     }
@@ -579,7 +561,7 @@ fn walk_parent_directories<'a, 'b>(
 ///
 /// [`FileTree`]: struct.FileTree.html
 pub struct TreeIterator<'a, 'b> {
-    stack: Vec<btree_map::Values<'b, &'a OsStr, DirectoryEntry<'a>>>,
+    stack: Vec<btree_map::Values<'b, &'a str, DirectoryEntry<'a>>>,
 }
 
 impl<'a, 'b> TreeIterator<'a, 'b> {

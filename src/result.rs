@@ -1,7 +1,6 @@
 //! Error types and the related `Result<T>`
 
-use std::path::PathBuf;
-
+use camino::Utf8PathBuf;
 use thiserror::Error;
 
 pub type ZipResult<T> = Result<T, ZipError>;
@@ -38,7 +37,7 @@ pub enum ZipError {
 
     /// A file wasn't found at the provied path
     #[error("No file in the archive with the path {0}")]
-    NoSuchFile(PathBuf),
+    NoSuchFile(Utf8PathBuf),
 
     /// A user-provided path (not one from a ZIP archive) was invalid.
     #[error("Invalid path")]

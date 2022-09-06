@@ -15,8 +15,8 @@
 
 use std::borrow::Cow;
 use std::convert::TryInto;
-use std::path::Path;
 
+use camino::Utf8Path;
 use chrono::{NaiveDate, NaiveDateTime};
 use codepage_437::*;
 use memchr::memmem;
@@ -458,22 +458,21 @@ impl<'a> FileMetadata<'a> {
     pub(crate) fn from_cde(cde: &CentralDirectoryEntry<'a>) -> ZipResult<Self> {
         let is_utf8 = is_utf8(cde.flags);
 
-        let path: Cow<Path> = if is_utf8 {
+        let path: Cow<Utf8Path> = if is_utf8 {
             let utf8 = std::str::from_utf8(cde.path).map_err(ZipError::Encoding)?;
-            Cow::Borrowed(Path::new(utf8))
+            Cow::Borrowed(Utf8Path::new(utf8))
         } else {
             let str_cow: Cow<str> = Cow::borrow_from_cp437(cde.path, &CP437_CONTROL);
             // Annoying: doesn't seem to be any Cow<str> -> Cow<Path>
             match str_cow {
-                Cow::Borrowed(s) => Cow::Borrowed(Path::new(s)),
+                Cow::Borrowed(s) => Cow::Borrowed(Utf8Path::new(s)),
                 Cow::Owned(s) => Cow::Owned(s.into()),
             }
         };
 
         if cde.disk_number != 0 {
             return Err(ZipError::UnsupportedArchive(format!(
-                "No support for multi-disk archives: file {} claims to be on disk {}",
-                path.display(),
+                "No support for multi-disk archives: file {path} claims to be on disk {}",
                 cde.disk_number,
             )));
         }
@@ -517,14 +516,14 @@ impl<'a> FileMetadata<'a> {
     ) -> ZipResult<Self> {
         let is_utf8 = is_utf8(local.flags);
 
-        let path: Cow<Path> = if is_utf8 {
+        let path: Cow<Utf8Path> = if is_utf8 {
             let utf8 = std::str::from_utf8(local.path).map_err(ZipError::Encoding)?;
-            Cow::Borrowed(Path::new(utf8))
+            Cow::Borrowed(Utf8Path::new(utf8))
         } else {
             let str_cow: Cow<str> = Cow::borrow_from_cp437(local.path, &CP437_CONTROL);
             // Annoying: doesn't seem to be any Cow<str> -> Cow<Path>
             match str_cow {
-                Cow::Borrowed(s) => Cow::Borrowed(Path::new(s)),
+                Cow::Borrowed(s) => Cow::Borrowed(Utf8Path::new(s)),
                 Cow::Owned(s) => Cow::Owned(s.into()),
             }
         };
