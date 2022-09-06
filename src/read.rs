@@ -70,9 +70,6 @@ pub struct FileMetadata<'a> {
     /// Future versions might provide an enum here of different OS's metadata.
     pub unix_mode: Option<u16>,
 
-    // TODO: Add other fields the user might want to know about:
-    // time, etc.
-
     /// The offset to the local file header in the archive
     pub(crate) header_offset: usize,
 }
@@ -270,8 +267,7 @@ impl<'a> ZipArchive<'a> {
         let mut file_slice = &self.mapping[metadata.header_offset..];
         let local_header = spec::LocalFileHeader::parse_and_consume(&mut file_slice)?;
         trace!("{:?}", local_header);
-        let local_metadata =
-            FileMetadata::from_local_header(&local_header, metadata)?;
+        let local_metadata = FileMetadata::from_local_header(&local_header, metadata)?;
         debug!("Reading {:?}", local_metadata);
         if cfg!(feature = "check-local-metadata") && *metadata != local_metadata {
             return Err(ZipError::InvalidArchive(
