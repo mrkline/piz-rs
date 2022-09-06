@@ -133,7 +133,7 @@ impl<'a> ZipArchive<'a> {
     /// many formats consist of ZIP archives prepended with some other data.
     /// For example, a self-extracting archive is one with an executable in the front.
     pub fn with_prepended_data(mut mapping: &'a [u8]) -> ZipResult<(Self, usize)> {
-        let eocdr_posit = spec::find_eocdr(&mapping)?;
+        let eocdr_posit = spec::find_eocdr(mapping)?;
         let eocdr = spec::EndOfCentralDirectory::parse(&mapping[eocdr_posit..])?;
         trace!("{:?}", eocdr);
 
@@ -384,12 +384,12 @@ impl<'a> FileTree<'a> for DirectoryContents<'a> {
     fn lookup<P: AsRef<Path>>(&self, path: P) -> ZipResult<&'a FileMetadata<'a>> {
         let path = path.as_ref();
         let parent_dir = if let Some(parent) = path.parent() {
-            match walk_parent_directories(parent, &self) {
+            match walk_parent_directories(parent, self) {
                 Err(ZipError::NoSuchFile(_)) => Err(ZipError::NoSuchFile(path.to_owned())),
                 other_result => other_result,
             }?
         } else {
-            &self
+            self
         };
 
         let base = path
@@ -403,15 +403,15 @@ impl<'a> FileTree<'a> for DirectoryContents<'a> {
     }
 
     fn traverse<'b>(&'b self) -> TreeIterator<'a, 'b> {
-        TreeIterator::new(&self)
+        TreeIterator::new(self)
     }
 
     fn files<'b>(&'b self) -> FileTreeIterator<'a, 'b> {
-        FileTreeIterator::new(&self)
+        FileTreeIterator::new(self)
     }
 
     fn directories<'b>(&'b self) -> DirectoryTreeIterator<'a, 'b> {
-        DirectoryTreeIterator::new(&self)
+        DirectoryTreeIterator::new(self)
     }
 }
 
@@ -676,7 +676,7 @@ impl<'a, 'b> Iterator for DirectoryTreeIterator<'a, 'b> {
         match next {
             Some(DirectoryEntry::Directory(d)) => {
                 self.inner.stack.push(d.children.values());
-                return Some(&d);
+                return Some(d);
             }
             Some(DirectoryEntry::File(_f)) => {}
             None => {
