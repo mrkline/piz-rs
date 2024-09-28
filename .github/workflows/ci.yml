@@ -25,7 +25,5 @@ jobs:
     - uses: actions/checkout@v2
     - name: Build lib, tests, and examples
       run: cargo build --all-targets --release
-    - name: Build test inputs
-      run: ./tests/create-inputs.sh
     - name: Run tests
       run: cargo test --release
