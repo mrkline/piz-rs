@@ -1,10 +1,12 @@
 #!/bin/bash
 
-set -euo pipefail
+set -exuo pipefail
 
-cd tests/inputs
+echo "Setting up test environment in $1 …"
+mkdir -p $1/tests/inputs
+cp -r tests/inputs/hello $1/tests/inputs/
+cd $1/tests/inputs
 
-echo "Setting up test environment..."
 rm -f *.zip
 
 # Hello Zip archive (small text files)

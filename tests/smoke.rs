@@ -1,3 +1,4 @@
+use std::env;
 use std::fs::File;
 use std::io;
 use std::process::Command;
@@ -22,13 +23,22 @@ fn smoke() -> Result<()> {
     ];
 
     if inputs.iter().any(|i| !Utf8Path::new(i).exists()) {
-        Command::new("tests/create-inputs.sh")
+        let current_dir = env::current_dir()?;
+        let tempdir = tempfile::tempdir().unwrap();
+        let temp_path = tempdir.path();
+        Command::new("tests/create-inputs.sh").arg(temp_path.as_os_str())
             .status()
             .expect("Couldn't set up input files");
-    }
-
-    for input in &inputs {
-        read_zip(input)?;
+        assert!(env::set_current_dir(temp_path).is_ok());
+        for input in &inputs {
+            read_zip(input)?;
+        }
+        tempdir.close()?;
+        assert!(env::set_current_dir(current_dir).is_ok());
+    } else {
+        for input in &inputs {
+            read_zip(input)?;
+        }
     }
 
     Ok(())
