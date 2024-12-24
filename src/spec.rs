@@ -58,7 +58,6 @@ enum System {
     Other(u8),
 }
 
-#[allow(dead_code)]
 impl System {
     fn from_source_version(source_version: u16) -> Self {
         // 4.4.2.1 The upper byte indicates the compatibility of the file
@@ -119,6 +118,7 @@ fn read_u16(input: &mut &[u8]) -> u16 {
 /// Found at the back of the ZIP archive and provides offsets for finding
 /// its central directory, along with lots of stuff that stopped being relevant
 /// when we stopped breaking ZIP archives onto multiple floppies.
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct EndOfCentralDirectory<'a> {
     pub disk_number: u16,
@@ -231,6 +231,7 @@ impl Zip64EndOfCentralDirectoryLocator {
 ///
 /// This should immediately precede the "End of central directory" record
 /// on Zip64 files and tell us where to find the Zip64 end of central directory record.
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct Zip64EndOfCentralDirectory<'a> {
     pub source_version: u16,
@@ -337,6 +338,7 @@ pub fn find_zip64_eocdr(mapping: &[u8]) -> ZipResult<usize> {
 ///
 /// Each of these records contians information about a file or folder
 /// stored in the ZIP archive.
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct CentralDirectoryEntry<'a> {
     pub source_version: u16,
@@ -569,7 +571,10 @@ fn parse_msdos(time: u16, date: u16) -> NaiveDateTime {
     // MSDOS uses years since 1980; Always interpreted as a positive value
     let years = ((0b1111_1110_0000_0000 & date) >> 9) as i32 + 1980;
 
-    NaiveDate::from_ymd(years, months, days).and_hms(hours, minutes, seconds)
+    NaiveDate::from_ymd_opt(years, months, days)
+        .expect("Couldn't parse DOS y/m/d") // Everything possible should be in range.
+        .and_hms_opt(hours, minutes, seconds)
+        .expect("Couldn't parse DOS h/m/s") // Ditto
 }
 
 /// Parses the "extra fields" found in central directory entries
@@ -625,6 +630,7 @@ fn parse_extra_field(metadata: &mut FileMetadata, mut extra_field: &[u8]) -> Zip
 /// These headers alllow for "streaming" decompression without
 /// the use of the central directory,
 /// but we don't make use of this feature.
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct LocalFileHeader<'a> {
     pub minimum_extract_version: u16,

@@ -74,7 +74,7 @@ pub struct FileMetadata<'a> {
     pub(crate) header_offset: usize,
 }
 
-impl<'a> FileMetadata<'a> {
+impl FileMetadata<'_> {
     /// Returns true if the given entry is a directory
     pub fn is_dir(&self) -> bool {
         // Path::ends_with() doesn't consider separators,
@@ -234,8 +234,7 @@ impl<'a> ZipArchive<'a> {
 
         let mut central_directory = &mapping[nominal_central_directory_offset..];
 
-        let mut entries = Vec::new();
-        entries.reserve(usize(entry_count)?);
+        let mut entries = Vec::with_capacity(usize(entry_count)?);
 
         for _ in 0..entry_count {
             let dir_entry = spec::CentralDirectoryEntry::parse_and_consume(&mut central_directory)?;
