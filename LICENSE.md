@@ -1,5 +1,5 @@
 
-Copyright © 2022 Matt Kline
+Copyright © 2022–2024 Matt Kline
 
 This software is provided 'as-is', without any express or implied
 warranty.  In no event will the authors be held liable for any damages
