@@ -25,7 +25,7 @@ codepage-437 = "0.1"
 crc32fast = "1.0"
 flate2 = "1.0"
 log = "0.4"
-thiserror = "1.0"
+thiserror = "2.0"
 memchr = "2.0"
 chrono = "0.4"
 
