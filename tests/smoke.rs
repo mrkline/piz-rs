@@ -26,7 +26,8 @@ fn smoke() -> Result<()> {
         let current_dir = env::current_dir()?;
         let tempdir = tempfile::tempdir().unwrap();
         let temp_path = tempdir.path();
-        Command::new("tests/create-inputs.sh").arg(temp_path.as_os_str())
+        Command::new("tests/create-inputs.sh")
+            .arg(temp_path.as_os_str())
             .status()
             .expect("Couldn't set up input files");
         assert!(env::set_current_dir(temp_path).is_ok());
