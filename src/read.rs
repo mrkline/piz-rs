@@ -261,7 +261,7 @@ impl<'a> ZipArchive<'a> {
     ///
     /// Since each file in a ZIP archive is compressed independently,
     /// multiple files can be read in parallel.
-    pub fn read(&self, metadata: &FileMetadata) -> ZipResult<Box<dyn io::Read + Send + 'a>> {
+    pub fn read(&self, metadata: &FileMetadata) -> ZipResult<DecompressionReader<io::Cursor<&[u8]>>> {
         let mut file_slice = &self.mapping[metadata.header_offset..];
         let local_header = spec::LocalFileHeader::parse_and_consume(&mut file_slice)?;
         trace!("{:?}", local_header);
@@ -294,16 +294,37 @@ fn make_reader<'a, R: io::Read + Send + 'a>(
     compression_method: CompressionMethod,
     crc32: u32,
     reader: R,
-) -> ZipResult<Box<dyn io::Read + Send + 'a>> {
+) -> ZipResult<DecompressionReader<R>> {
     match compression_method {
-        CompressionMethod::None => Ok(Box::new(Crc32Reader::new(reader, crc32))),
+        CompressionMethod::None => Ok(DecompressionReader::None(Crc32Reader::new(reader, crc32))),
         CompressionMethod::Deflate => {
             let deflate_reader = DeflateDecoder::new(reader);
-            Ok(Box::new(Crc32Reader::new(deflate_reader, crc32)))
+            Ok(DecompressionReader::Deflate(Crc32Reader::new(
+                deflate_reader,
+                crc32,
+            )))
         }
         _ => Err(ZipError::UnsupportedArchive(String::from(
             "Compression method not supported",
         ))),
+    }
+}
+
+#[non_exhaustive]
+pub enum DecompressionReader<R> where R: io::Read + Send {
+    None(Crc32Reader<R>),
+    Deflate(Crc32Reader<DeflateDecoder<R>>),
+}
+
+impl<R> io::Read for DecompressionReader<R>
+where
+    R: io::Read + Send,
+{
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            DecompressionReader::None(reader) => reader.read(buf),
+            DecompressionReader::Deflate(reader) => reader.read(buf),
+        }
     }
 }
 
