@@ -16,11 +16,11 @@ use piz::result::ZipError;
 fn smoke() -> Result<()> {
     let _ = env_logger::builder().is_test(true).try_init();
 
-    let inputs = [
-        "tests/inputs/hello.zip",
-        "tests/inputs/hello-prefixed.zip",
-        "tests/inputs/zip64.zip",
-    ];
+    let mut inputs = vec!["tests/inputs/hello.zip", "tests/inputs/hello-prefixed.zip"];
+    // Skip zip64 mmap failure on 32-bit systems.
+    if std::mem::size_of::<usize>() >= 8 {
+        inputs.push("tests/inputs/zip64.zip");
+    }
 
     let current_dir = env::current_dir()?;
     let tempdir = tempfile::tempdir().unwrap();
