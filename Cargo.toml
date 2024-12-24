@@ -31,10 +31,10 @@ chrono = "0.4"
 
 [dev-dependencies]
 anyhow = "1.0"
-env_logger = "0.8"
+env_logger = "0.11"
 rayon = "1.0"
-memmap2 = "0.7"
-stderrlog = "0.5.1"
+memmap2 = "0.9"
+stderrlog = "0.6"
 structopt = "0.3"
 tempfile = "3"
 
