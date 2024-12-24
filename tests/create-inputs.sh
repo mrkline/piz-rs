@@ -7,8 +7,6 @@ mkdir -p $1/tests/inputs
 cp -r tests/inputs/hello $1/tests/inputs/
 cd $1/tests/inputs
 
-rm -f *.zip
-
 # Hello Zip archive (small text files)
 zip -r9 hello.zip hello/
 
@@ -16,7 +14,6 @@ zip -r9 hello.zip hello/
 echo "Some junk up front" | cat - hello.zip > hello-prefixed.zip
 
 # Create a Zip64 archive (one with files too large for original 32-bit fields)
-rm -rf zip64
 mkdir zip64
 truncate -s 100M zip64/zero100
 truncate -s 5G zip64/zero5000
