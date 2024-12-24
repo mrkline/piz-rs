@@ -6,7 +6,8 @@ use std::process::Command;
 use anyhow::{Context, Result};
 use camino::Utf8Path;
 use log::*;
-use memmap::Mmap;
+use memmap2::Mmap;
+
 use rayon::prelude::*;
 
 use piz::read::*;

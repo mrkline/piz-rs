@@ -118,8 +118,7 @@ impl<'a> ZipArchive<'a> {
     /// For larger ones, memory map!
     /// ```no_run
     /// # use std::fs::{self, File};
-    /// # extern crate memmap;
-    /// # use memmap::Mmap;
+    /// # use memmap2::Mmap;
     /// # use piz::*;
     /// let zip_file = File::open("foo.zip")?;
     /// let mapping = unsafe { Mmap::map(&zip_file)? };

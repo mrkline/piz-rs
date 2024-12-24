@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use anyhow::*;
 use log::*;
-use memmap::Mmap;
+use memmap2::Mmap;
 use rayon::prelude::*;
 use structopt::*;
 

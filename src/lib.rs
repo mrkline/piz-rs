@@ -13,11 +13,8 @@
 //! ```no_run
 //! # use std::fs::{self, File};
 //! # use std::io;
-//! # extern crate anyhow;
-//! # extern crate rayon;
 //! # use rayon::prelude::*;
-//! # extern crate memmap;
-//! # use memmap::Mmap;
+//! # use memmap2::Mmap;
 //! # use piz::*;
 //! # use piz::read::*;
 //! #
