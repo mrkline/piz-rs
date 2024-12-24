@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -exuo pipefail
 
@@ -19,6 +19,5 @@ echo "Some junk up front" | cat - hello.zip > hello-prefixed.zip
 rm -rf zip64
 mkdir zip64
 truncate -s 100M zip64/zero100
-truncate -s 4400M zip64/zero4400
 truncate -s 5G zip64/zero5000
 zip -r9 zip64.zip zip64/

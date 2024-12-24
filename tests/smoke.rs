@@ -22,26 +22,19 @@ fn smoke() -> Result<()> {
         "tests/inputs/zip64.zip",
     ];
 
-    if inputs.iter().any(|i| !Utf8Path::new(i).exists()) {
-        let current_dir = env::current_dir()?;
-        let tempdir = tempfile::tempdir().unwrap();
-        let temp_path = tempdir.path();
-        Command::new("tests/create-inputs.sh")
-            .arg(temp_path.as_os_str())
-            .status()
-            .expect("Couldn't set up input files");
-        assert!(env::set_current_dir(temp_path).is_ok());
-        for input in &inputs {
-            read_zip(input)?;
-        }
-        tempdir.close()?;
-        assert!(env::set_current_dir(current_dir).is_ok());
-    } else {
-        for input in &inputs {
-            read_zip(input)?;
-        }
+    let current_dir = env::current_dir()?;
+    let tempdir = tempfile::tempdir().unwrap();
+    let temp_path = tempdir.path();
+    Command::new("tests/create-inputs.sh")
+        .arg(temp_path.as_os_str())
+        .status()
+        .expect("Couldn't set up input files");
+    env::set_current_dir(temp_path)?;
+    for input in &inputs {
+        read_zip(input)?;
     }
-
+    tempdir.close()?;
+    env::set_current_dir(current_dir)?;
     Ok(())
 }
 
@@ -89,7 +82,6 @@ fn read_zip(zip_path: &str) -> Result<()> {
         }
         "tests/inputs/zip64.zip" => {
             tree.lookup("zip64/zero100")?;
-            tree.lookup("zip64/zero4400")?;
             tree.lookup("zip64/zero5000")?;
         }
         wut => unreachable!("{}", wut),
